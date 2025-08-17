@@ -84,5 +84,9 @@ export default async function handler(req, res) {
   
   // Helpful caching header for Vercel (optional) — adjust as you like
   res.setHeader("Cache-Control", "s-maxage=5, stale-while-revalidate=10");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  
   res.status(200).json(status);
 }

@@ -74,18 +74,18 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
-
+  
   const { lrcText, geniusTr, title, artist } = req.body;
   if (!lrcText) return res.status(400).json({ error: "lrcText is required" });
-
+  
   const lrcHash = generateHash(lrcText);
-
+  
   try {
     const cacheResult = await db.execute({
       sql: "SELECT rom, transl FROM cache WHERE hash = ?",
       args: [lrcHash],
     });
-
+    
     if (cacheResult.rows.length > 0) {
       const row = cacheResult.rows[0];
       return res.json({ rom: row.rom, transl: row.transl });
@@ -93,15 +93,15 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error("DB error:", err);
   }
-
+  
   const systemPrompt = `
 You are an LRC romanizer and translator.
 Return JSON { "rom": "...", "transl": "..." } only.
 `;
-
+  
   const userPrompt = `Song: ${title}\nArtist: ${artist}\nLyrics:\n${lrcText}`;
   const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
-
+  
   const providers = getPrioritizedProviders();
   for (const provider of providers) {
     try {
@@ -110,17 +110,21 @@ Return JSON { "rom": "...", "transl": "..." } only.
         rom: result.rom.replace(/\\n/g, "\n"),
         transl: result.transl.replace(/\\n/g, "\n"),
       };
-
+      
       await db.execute({
         sql: "INSERT OR IGNORE INTO cache (hash, rom, transl) VALUES (?, ?, ?)",
         args: [lrcHash, finalResult.rom, finalResult.transl],
       });
-
+      
       return res.json(finalResult);
     } catch (err) {
       console.error(`Provider ${provider.id} failed:`, err.message);
     }
   }
-
+  
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  
   return res.status(503).json({ error: "All providers failed" });
 }
