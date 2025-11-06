@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         [BETA] Spotify Web Player Floating Lyrics
 // @namespace    http://tampermonkey.net/
-// @version      2.9.2
+// @version      2.9.3
 // @description  Synced lyrics with translation/romanization resizable/draggable panel, themed, opacity control. Translations are provided by Gemini 2.0 Flash and 1.5 Flash via the Google AI Studio API (Accessed via a remote server).
 // @author       jayxdcode
 // @match        https://open.spotify.com/*
@@ -26,7 +26,7 @@
   'use strict';
 
   // -- begin --
-  const SWPFL_VERSION = '2.9.2';
+  const SWPFL_VERSION = '2.9.3';
   const SWPFL_USER_AGENT = `SWPFL (user.js release) v${SWPFL_VERSION} (https://github.com/jayxdcode/swpfl)`;
 
   const LRCLIB_HEADERS = {
@@ -125,6 +125,7 @@
   let logVisible = false
 
   let dur = 0;
+  let playbackPos = 0;
 
   const fallbackSync = true;
 
@@ -1303,8 +1304,7 @@
       const res = await gmFetch(url);
       const html = res.responseText ?? (await res.text?.()) ?? '';
       const doc = new DOMParser().parseFromString(html, 'text/html');
-      const titleText = doc.querySelector(SELECTORS.parseAl
-        titleText)?.textContent;
+      const titleText = doc.querySelector(SELECTORS.parseAl.titleText)?.textContent;
       if (titleText) {
         const match = titleText.match(/^(.*?) - Album by .*? \| Spotify$/); if (match && match.length > 1) return match[1];
       }
@@ -1362,9 +1362,11 @@
       regex.lastIndex = 0;
     }
     lines.sort((a, b) => a.time - b.time);
-    if (lines.length && lines[0].time !== 0) lines.unshift({
-      time: 0, text: ''
-    });
+    if (lines.length && lines[0].time !== 0) {
+      lines.unshift({
+        time: 0, text: ''
+      });
+    }
     return lines;
   }
 
@@ -1491,16 +1493,17 @@
     } catch (e) {
       // alert(`Error while displaying lrc: ${e} \n\n\n Please report this to \n\nhttps://github.com/jayxdcode/src-backend/issues\n\nalongside with a screenshot of this alert.`);
       window.debug('[❗ERROR] [Lyrics] loadLyrics error:', `${e}`);
-      if (e.name === 'AbortError')
+      if (e.name === 'AbortError') {
         onTransReady([{
-        time: 0, text: 'Aborted due to changing of tracks while data is being fetched)', roman: '', trans: ''
-      }]);
-      sendImpEvents('Aborted due to changing of tracks while data is being fetched)');
-    } else {
-      onTransReady([{
-        time: 0, text: '× An error occurred while loading lyrics.', roman: '', trans: ''
-      }]);
-      sendImpEvents('An error occured while loading lyrics.');
+          time: 0, text: 'Aborted due to changing of tracks while data is being fetched)', roman: '', trans: ''
+        }]);
+        sendImpEvents('Aborted due to changing of tracks while data is being fetched)');
+      } else {
+        onTransReady([{
+          time: 0, text: '× An error occurred while loading lyrics.', roman: '', trans: ''
+        }]);
+        sendImpEvents('An error occured while loading lyrics.');
+      }
     }
   }
 
@@ -1571,17 +1574,22 @@
   async function getTrackInfo() {
     const bar = document.querySelector(SELECTORS.getTrackInfo.bar);
     if (!bar) return null;
-    const titleEl = bar.querySelector(SELECTORS.getTrackInfo.titleEl));
-  const artistEl = bar.querySelector(SELECTORS.getTrackInfo.artistEl);
-  const title = titleEl?.textContent.trim() || '';
-  const artist = artistEl?.textContent.trim() || '';
-  const album = titleEl?.href ? await parseAl(titleEl.href): '';
-  const progressInput = bar.querySelector(SELECTORS.getTrackInfo.progressInput);
-  const duration = progressInput ? progressInput.max: null;
-  return {
-    id: title + '|' + artist, title, artist, album, duration, bar
-  };
-}
+    const titleEl = bar.querySelector(SELECTORS.getTrackInfo.titleEl);
+    const artistEl = bar.querySelector(SELECTORS.getTrackInfo.artistEl);
+    const title = titleEl?.textContent.trim() || '';
+    const artist = artistEl?.textContent.trim() || '';
+    const album = titleEl?.href ? await parseAl(titleEl.href): '';
+    const progressInput = bar.querySelector(SELECTORS.getTrackInfo.progressInput);
+    const duration = progressInput ? progressInput.max: null;
+    return {
+      id: title + '|' + artist,
+      title,
+      artist,
+      album,
+      duration,
+      bar
+    };
+  }
 
   function renderLyrics(currentIdx) {
     try {
@@ -1707,6 +1715,8 @@
         //debug("[syncLyrics] Invalid time value:", t);
         return;
       }
+
+      playbackPos = t;
 
       // Cache numeric times on the array to avoid remapping every call.
       // Attaching _times to the array is cheap and prevents repeated work.
@@ -1882,8 +1892,8 @@
 
   // [DEV-ONLY] Utility for sending important logs to local WebSocket
   function sendImpEvents(msgStr) {
-    if (prefs.ws === true && (Math.floor(t/1000) !== prefs.wsLastSent || idx !== lastRenderedIdx)) return;
-    prefs.wsLastSent = Math.floor(t/1000);
+    if (prefs.ws === true) return;
+
     const fmtMsg = `<code>${msgStr}</code>`
     const lrc = [{
       o: fmtMsg
@@ -1891,14 +1901,14 @@
 
     const data = {
       version: 2,
-      ts: Number(t),
-      tsf: ms2mmss(t),
+      ts: Number(playbackPos),
+      tsf: ms2mmss(playbackPos),
       d: Number(currentTrackDur),
       df: ms2mmss(Number(currentTrackDur)),
       ti: currInf.title,
       ar: currInf.artist,
       al: currInf.album,
-      idx: idx,
+      idx: 0,
       lrc: lrc
     }
 
@@ -2160,7 +2170,7 @@
 
   // Wait for the main UI to be available before initializing
   const readyObserver = new MutationObserver((mutations, obs) => {
-    if (document.querySelector(SELECTORS['__readyObserver'])) {
+    if (document.querySelector(SELECTORS.__readyObserver)) {
       obs.disconnect();
       init();
       if (prefs.devOps) startLyricsObserver();
