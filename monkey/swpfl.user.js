@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         [BETA] Spotify Web Player Floating Lyrics
 // @namespace    http://tampermonkey.net/
-// @version      2.9.1
+// @version      2.9.2
 // @description  Synced lyrics with translation/romanization resizable/draggable panel, themed, opacity control. Translations are provided by Gemini 2.0 Flash and 1.5 Flash via the Google AI Studio API (Accessed via a remote server).
 // @author       jayxdcode
 // @match        https://open.spotify.com/*
@@ -26,7 +26,7 @@
   'use strict';
 
   // -- begin --
-  const SWPFL_VERSION = '2.9.1';
+  const SWPFL_VERSION = '2.9.2';
   const SWPFL_USER_AGENT = `SWPFL (user.js release) v${SWPFL_VERSION} (https://github.com/jayxdcode/swpfl)`;
 
   const LRCLIB_HEADERS = {
