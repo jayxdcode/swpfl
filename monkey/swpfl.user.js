@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         [BETA] Spotify Web Player Floating Lyrics
 // @namespace    http://tampermonkey.net/
-// @version      2.9.0
+// @version      2.9.1
 // @description  Synced lyrics with translation/romanization resizable/draggable panel, themed, opacity control. Translations are provided by Gemini 2.0 Flash and 1.5 Flash via the Google AI Studio API (Accessed via a remote server).
 // @author       jayxdcode
 // @match        https://open.spotify.com/*
@@ -17,16 +17,16 @@
 // @connect      sv443.net
 // @copyright    2025, jayxdcode
 // @sandbox      JavaScript
+// @require      http://192.168.8.10:8080/socket.io/socket.io.js
 // @downloadURL  https://raw.githubusercontent.com/jayxdcode/swpfl/main/monkey/swpfl.user.js?dl=true
 // @updateURL    https://raw.githubusercontent.com/jayxdcode/swpfl/main/monkey/swpfl.user.js?dl=true
 // ==/UserScript==
 
 (function() {
     'use strict';
-    let got = false;
 
     // -- begin --
-    const SWPFL_VERSION = '2.9.0';
+    const SWPFL_VERSION = '2.9.1';
     const SWPFL_USER_AGENT = `SWPFL (user.js release) v${SWPFL_VERSION} (https://github.com/jayxdcode/swpfl)`;
 
     const LRCLIB_HEADERS = {
@@ -35,14 +35,21 @@
     };
 
     const mobileDebug = true; // only set to true if you have eruda.
+    let got = false
+    
+    /*
+    developer flags. keep all ``toggle``s to false in release unless you know what you are doing.
+    */
+    
     let prefs = {
         activeBeta: {
-            lrcNotif: false,
+            lrcNotif: false, // toggle
         },
 
-        devOps: true, // local development experiment. doesnt do anything if you are not the developer (may throw an error tho)
-        
-        ws: true,
+        devOps: false, // toggle
+        // local development experiment. doesnt do anything if you are not the developer (may throw an error tho)
+
+        ws: true, // toggle
         wsLastSent: null,
 
         lrcNotif: {
@@ -52,6 +59,45 @@
             maxNotifs: 5,
         },
     }
+    
+    // *** ENDING OF developer flags ***
+    
+    /*
+      UPDATE v2.9.1: added all querySelectors in one area for easier patches when site changes querySelectors.
+    */
+    const SELECTORS = {
+      "lastUpd": "2025-11-06T11:31:02Z", // ISO 8601
+  "parseAl": {
+    "titleText": "title"
+  },
+  "timeJump": {
+    "input": "[data-testid='playback-progressbar'] input[type='range']",
+    "slider": "div[role='slider'][aria-valuenow]"
+  },
+  "getTracInfo": {
+    "bar": "[data-testid='now-playing-bar'], [data-testid='main-view-player-bar'], [data-testid='bottom-bar'], footer",
+    
+    "titleEl": "[data-testid='context-item-info-title'] [data-testid='context-item-link'], [data-testid='nowplaying-track-link'], [data-testid='now-playing-widget-title'] a, .track-info__name a",
+    "artistEl": "[data-testid='context-item-info-artist'], [data-testid='nowplaying-artist'], [data-testid='now-playing-widget-artist'] a, .track-info__artists a",
+    "progressInput": "input[type='range']"
+  },
+  "renderLyrics": {
+    "progressInput": "[data-testid='playback-progressbar'] input[type='range']",
+    "t": "div[data-test-position]",
+    "tAttr": "data-test-position"
+  },
+  "synceLyrics": {
+    "progressInput": "[data-testid='playback-progressbar'] input[type='range']",
+    "t": "div[data-test-position]",
+    "tAttr": "data-test-position"
+  },
+  "setupProgressSync": {
+    "pbar": "[data-test-position]"
+  },
+  "__readyObserver": "[data-testid='now-playing-bar'], [data-testid='main-view-player-bar']"
+}
+    
+    
 
     const BACKEND_URL = "https://src-backend.onrender.com/api/translate";
 
@@ -88,6 +134,41 @@
     let notifIdx = 0;
 
     const delayTune = 1100; // How much delay do you observe? (in ms)
+
+    const WEBSOCKET_URL = 'http://192.168.8.10:8080';
+    let socket = null;
+    const RECONNECT_INTERVAL = 5000; // 5 seconds in milliseconds
+
+    const ms2mmss = (ms) => {
+        return new Date(ms).toISOString().slice(14, 19);
+    };
+
+    function connectWebSocket() {
+        socket = new io(WEBSOCKET_URL);
+
+        socket.onopen = () => {
+            debug('[WS open] Connection established.');
+            // You can send a message here, like an "I'm back" message
+        };
+
+        socket.onmessage = (event) => {
+            debug(`[WS message] Data received: ${event.data}`);
+            // Handle incoming data
+        };
+
+        socket.onclose = (event) => {
+            debug('[WS close] Connection closed. Attempting to reconnect...');
+            // Only attempt to reconnect if the close wasn't intentional
+            if (!event.wasClean) {
+                setTimeout(connectWebSocket, RECONNECT_INTERVAL);
+            }
+        };
+
+        socket.onerror = (error) => {
+            debug(`[WS error] WebSocket error: ${error.message}`);
+            // The 'close' event will usually follow an 'error' event, triggering the reconnect logic there.
+        };
+    }
 
     // ---- cancellation helpers (insert near other top-level globals) ----
     const gmFetchControllers = new Map(); // key -> [AbortController, ...] (supports multiple controllers per key)
@@ -1036,7 +1117,8 @@
             const res = await gmFetch(url);
             const html = res.responseText ?? (await res.text?.()) ?? '';
             const doc = new DOMParser().parseFromString(html, 'text/html');
-            const titleText = doc.querySelector('title')?.textContent;
+            const titleText = doc.querySelector(SELECTORS.parseAl
+            titleText)?.textContent;
             if (titleText) { const match = titleText.match(/^(.*?) - Album by .*? \| Spotify$/); if (match && match.length > 1) return match[1]; }
         } catch (e) { window.debug('parseAl error:', e.message); }
         return '';
@@ -1198,7 +1280,7 @@
             ms = Number(ms);
             if (isNaN(ms)) return false;
 
-            const input = document.querySelector("[data-testid='playback-progressbar'] input[type='range']");
+            const input = document.querySelector(SELECTORS.timeJump.input);
             if (input) {
                 input.value = ms;
                 //input.dispatchEvent(new Event('click', { bubbles: true }));
@@ -1208,7 +1290,7 @@
                 return;
             }
 
-            const slider = document.querySelector("[div[role='slider'][aria-valuenow]");
+            const slider = document.querySelector(SELECTORS.timeJump.slider);
             if (slider) {
                 slider.setAttribute('aria-valuenow', String(ms));
                 slider.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1245,23 +1327,22 @@
     }
 
     async function getTrackInfo() {
-        const bar = document.querySelector('[data-testid="now-playing-bar"], [data-testid="main-view-player-bar"], [data-testid="bottom-bar"], footer');
+        const bar = document.querySelector(SELECTORS.getTrackInfo.bar);
         if (!bar) return null;
-        const titleEl = bar.querySelector('[data-testid="context-item-info-title"] [data-testid="context-item-link"], [data-testid="nowplaying-track-link"], [data-testid="now-playing-widget-title"] a, .track-info__name a');
-        const artistEl = bar.querySelector('[data-testid="context-item-info-artist"], [data-testid="nowplaying-artist"], [data-testid="now-playing-widget-artist"] a, .track-info__artists a');
+        const titleEl = bar.querySelector(SELECTORS.getTrackInfo.titleEl));
+        const artistEl = bar.querySelector(SELECTORS.getTrackInfo.artistEl);
         const title = titleEl?.textContent.trim() || '';
         const artist = artistEl?.textContent.trim() || '';
         const album = titleEl?.href ? await parseAl(titleEl.href) : '';
-        const progressInput = bar.querySelector('input[type="range"]');
+        const progressInput = bar.querySelector(SELECTORS.getTrackInfo.progressInput);
         const duration = progressInput ? progressInput.max : null;
-        currentTrackDur = duration;
         return { id: title + '|' + artist, title, artist, album, duration, bar };
     }
 
     function renderLyrics(currentIdx) {
         try {
-            const progressInput = document.querySelector("[data-testid='playback-progressbar'] input[type='range']");
-            let t = fallbackSync ? document.querySelector("div[data-test-position]").getAttribute("data-test-position") : progressInput.value;
+            const progressInput = document.querySelector(SELECTORS.renderLyrics.progressInput);
+            let t = fallbackSync ? document.querySelector(SELECTORS.renderLyrics.t).getAttribute(SELECTORS.renderLyrics.tAttr) : progressInput.value;
 
             //debug("[renderLyrics] Called with currentIdx:", currentIdx)
 
@@ -1302,44 +1383,44 @@
             min-height: 1.6em;
             display: block;
             ${isCurrent || isPlain
-        ? 'font-weight:bold; font-size:1.25em;'
-        : 'opacity:.7;'}`.trim();
+                ? 'font-weight:bold; font-size:1.25em;'
+                : 'opacity:.7;'}`.trim();
 
-          html += `<div class="handler ${lineClass}" style="${lineStyle}" data-timestamp="${ln.time}">${ln.text || ' '}`;
+                html += `<div class="handler ${lineClass}" style="${lineStyle}" data-timestamp="${ln.time}">${ln.text || ' '}`;
 
-          if (ln.roman && ln.text.trim() !== ln.roman.trim()) {
-              html += `<div style="font-size:.75em; color:${subColor}; margin-top:2px; font-style: italic !important;">${ln.roman}</div>`;
-          }
-          if (ln.trans && ln.text.trim() !== ln.trans.trim()) {
-              html += `<div style="font-size:.75em; color:${subColor}; margin-top:2px;">${ln.trans}</div>`;
-          }
-          html += `</div>`;
+                if (ln.roman && ln.text.trim() !== ln.roman.trim()) {
+                    html += `<div style="font-size:.75em; color:${subColor}; margin-top:2px; font-style: italic !important;">${ln.roman}</div>`;
+                }
+                if (ln.trans && ln.text.trim() !== ln.trans.trim()) {
+                    html += `<div style="font-size:.75em; color:${subColor}; margin-top:2px;">${ln.trans}</div>`;
+                }
+                html += `</div>`;
 
-          //if (isCurrent) debug("[renderLyrics] Current line index:", i, "time:", ln.time, "text:", ln.text);
-          // if (isCurrent) debug("[renderLyrics] {idx: ", currentIdx, "} {inline: ", ln.time, "} {progress: ", t, "}");
-      }
+                //if (isCurrent) debug("[renderLyrics] Current line index:", i, "time:", ln.time, "text:", ln.text);
+                // if (isCurrent) debug("[renderLyrics] {idx: ", currentIdx, "} {inline: ", ln.time, "} {progress: ", t, "}");
+            }
 
-        linesDiv.innerHTML = html;
-        //debug("[renderLyrics] Updated linesDiv.innerHTML");
+            linesDiv.innerHTML = html;
+            //debug("[renderLyrics] Updated linesDiv.innerHTML");
 
-        const currElem = linesDiv.querySelector('.tm-lyric-current');
-        if (currElem && !isPlain) {
-            linesDiv.scrollTop =
-                currElem.offsetTop -
-                (linesDiv.clientHeight / 2) +
-                (currElem.offsetHeight / 2);
-            //debug("[renderLyrics] Scrolled to current lyric at offsetTop:", currElem.offsetTop);
-        } else {
-            //debug("[renderLyrics] .tm-lyric-current not found for index:", currentIdx);
+            const currElem = linesDiv.querySelector('.tm-lyric-current');
+            if (currElem && !isPlain) {
+                linesDiv.scrollTop =
+                    currElem.offsetTop -
+                    (linesDiv.clientHeight / 2) +
+                    (currElem.offsetHeight / 2);
+                //debug("[renderLyrics] Scrolled to current lyric at offsetTop:", currElem.offsetTop);
+            } else {
+                //debug("[renderLyrics] .tm-lyric-current not found for index:", currentIdx);
+            }
+
+            addTimeJumpListener();
+            //debug("[renderLyrics] addTimeJumpListener called");
+
+        } catch (error) {
+            debug("[renderLyrics] ERROR:", error.message, error);
         }
-
-        addTimeJumpListener();
-        //debug("[renderLyrics] addTimeJumpListener called");
-
-    } catch (error) {
-        debug("[renderLyrics] ERROR:", error.message, error);
     }
-  }
 
     function syncLyrics(bar, durationMs, progVal = null) {
         try {
@@ -1369,11 +1450,11 @@
             } else if (bar && typeof bar.value !== "undefined") {
                 t = Number(bar.value);
             } else {
-                const progressInput = document.querySelector("[data-testid='playback-progressbar'] input[type='range']");
+                const progressInput = document.querySelector(SELECTORS.syncLyrics.progressInput);
                 //debug("[syncLyrics] progressInput:", progressInput);
                 if (!progressInput || fallbackSync === true) {
                     //debug("[syncLyrics] progressInput not found.");
-                    t = Number(document.querySelector("div[data-test-position]").getAttribute("data-test-position")) + delayTune;
+                    t = Number(document.querySelector(SELECTORS.syncLyrics.t).getAttribute(SELECTORS.syncLyrics.tAttr)) + delayTune;
                 } else {
                     t = Number(progressInput.value);
                 }
@@ -1420,8 +1501,42 @@
                 }
             }
 
-
             const isPlain = lyricsData[0].text.includes('PLAIN');
+
+            if (prefs.ws === true && (Math.floor(t/1000) !== prefs.wsLastSent || idx !== lastRenderedIdx)) {
+                prefs.wsLastSent = Math.floor(t/1000);
+
+                let lrc = [];
+                lyricsData.forEach(line => {
+                    const obj = {
+                        o: line.text,
+                        r: (line.roman && line.roman.trim() !== "" && line.roman.trim() !== line.text.trim()) ? line.roman.trim() : "",
+                        t: (line.trans && line.trans.trim() !== "" && line.trans.trim() !== line.text.trim()) ? line.trans.trim() : ""
+                    }
+
+                    lrc.push(obj);
+                });
+                const data = {
+                    version: 2,
+                    ts: Number(t),
+                    tsf: ms2mmss(t),
+                    d: Number(currentTrackDur),
+                    df: ms2mmss(Number(currentTrackDur)),
+                    ti: currInf.title,
+                    ar: currInf.artist,
+                    al: currInf.album,
+                    idx: idx,
+                    lrc: lrc
+                }
+
+
+                // debug("data:", JSON.stringify(data));
+                try {
+                    socket.send(JSON.stringify(data));
+                } catch(e) {
+                    debug('error', 'failed to send to socket', e)
+                }
+            }
 
             // Only render when index changes
             //debug("[syncLyrics] Calculated lyric index:", idx, "lastRenderedIdx:", lastRenderedIdx);
@@ -1512,7 +1627,7 @@
         if (!bar) return;
         if (observer) observer.disconnect();
         if (syncIntervalId) clearInterval(syncIntervalId);
-        const pbar = bar.querySelector('[data-test-position]');
+        const pbar = bar.querySelector(SELECTORS.setupProgressSync.pbar);
         if (pbar) {
             observer = new MutationObserver(() => syncLyrics(bar, durationMs));
             observer.observe(pbar, { attributes: true, attributeFilter: ['style', 'aria-valuenow', 'data-test-position'] });
@@ -1531,6 +1646,7 @@
 
                 currentTrackId = info.id;
                 currInf = info;
+                currentTrackDur = info.duration;
                 lyricsData = null;
                 lastRenderedIdx = -1;
                 dur = info.duration;
@@ -1669,6 +1785,8 @@
     function init() {
         setupLogElement();
 
+        connectWebSocket();
+
         window.debug('Initializing Lyrics Panel');
         createPanel();
         window.addEventListener('resize', debounce(handleViewportChange, 250));
@@ -1757,7 +1875,7 @@
 
     // Wait for the main UI to be available before initializing
     const readyObserver = new MutationObserver((mutations, obs) => {
-        if (document.querySelector('[data-testid="now-playing-bar"], [data-testid="main-view-player-bar"]')) {
+        if (document.querySelector(SELECTORS['__readyObserver'])) {
             obs.disconnect();
             init();
             if (prefs.devOps) startLyricsObserver();
