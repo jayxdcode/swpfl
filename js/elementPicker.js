@@ -1,17 +1,11 @@
 /*
- Element Picker — UMD build (v1.1.0)
+ Element Picker — UMD build (v1.2.0)
  - Exports: startElementPicker
- - LocalStorage usage:
-    localStorage['selectorscfg'] = {
-       "merged.el1": { selector: "...", attributes: {...}, ... },
-       "list.key": [ { selector: "...", ... }, ... ]
-    }
- - Features:
-    * Two inputs: storage item key (default: selectorscfg) and JSON key (e.g. merged.el1)
-    * Update -> overwrites obj[jsonKey] with payload
-    * Add -> appends payload into array at obj[jsonKey] (creates/normalizes as needed) and opens sorter
-    * Sorter UI -> reorder (Up/Down), delete, save back to localStorage
- Version: 1.1.0
+ - Responsive details window
+ - Editable selector + child dropdown + Test button
+ - Shows element text content
+ - LocalStorage: storage item key (default 'selectorscfg') and JSON key inside it
+ Version: 1.2.0
 */
 (function (root, factory) {
 	if (typeof define === 'function' && define.amd) {
@@ -23,7 +17,7 @@
 	}
 }(typeof self !== 'undefined' ? self : this, function () {
 
-	const VERSION = '1.1.0';
+	const VERSION = '1.2.0';
 
 	// Prevent double-loading across contexts
 	if (typeof globalThis !== 'undefined' && globalThis.__elementPickerLoaded) {
@@ -76,6 +70,27 @@
 		return parts.join(' > ');
 	}
 
+	// Simple child selector for direct children relative to parent
+	function getSimpleChildSelector(child){
+		if(!child || child.nodeType !== 1) return '';
+		const tag = child.tagName.toLowerCase();
+		const cls = child.classList && child.classList.length ? '.'+Array.from(child.classList).slice(0,2).map(c=>cssEscape(c)).join('.') : '';
+		// nth-of-type among parent's children with same tag
+		const parent = child.parentNode;
+		if (!parent) return tag + cls;
+		const sameTag = Array.from(parent.children).filter(c => c.tagName === child.tagName);
+		if (sameTag.length > 1){
+			let idx = 0;
+			for (let i=0;i<parent.children.length;i++){
+				const c = parent.children[i];
+				if (c.tagName === child.tagName) idx++;
+				if (c === child) break;
+			}
+			return `${tag}${cls}:nth-of-type(${idx})`;
+		}
+		return tag + cls;
+	}
+
 	// Read attributes as {name: value}
 	function getAttributes(el){
 		const attrs = {};
@@ -89,7 +104,7 @@
 		return attrs;
 	}
 
-	// localStorage helpers (storageKey is the item name, default 'selectorscfg')
+	// localStorage helpers
 	function loadStorageObject(storageKey){
 		storageKey = storageKey || 'selectorscfg';
 		try{
@@ -184,24 +199,26 @@
 	transition: opacity 180ms ease, transform 180ms ease;
 }
 
-/* details window */
+/* details window - responsive so it doesn't go offscreen */
 #ep-details {
 	position: fixed;
 	left: 20px;
+	right: 20px;
 	bottom: 20px;
-	width: 520px;
-	max-width: calc(100% - 40px);
+	max-width: 720px;
 	background: #0b0b0b;
 	color: #fff;
 	border: 1px solid rgba(255,255,255,0.08);
 	border-radius: 10px;
-	padding: 14px;
+	padding: 12px;
 	box-shadow: 0 12px 34px rgba(0,0,0,0.6);
 	z-index: 2147483000;
 	font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+	max-height: calc(100vh - 80px);
+	overflow: auto;
 }
 #ep-details h3{ margin: 0 0 10px 0; font-size: 15px; }
-#ep-details .ep-row{ margin-bottom: 8px; font-size: 13px; }
+#ep-details .ep-row{ margin-bottom: 8px; font-size: 13px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 #ep-details input[type="text"]{
 	padding: 8px 10px;
 	background: rgba(255,255,255,0.03);
@@ -209,8 +226,11 @@
 	border: 1px solid rgba(255,255,255,0.04);
 	border-radius: 6px;
 }
-#ep-details input.ep-input-storage{ width: 180px; margin-right: 8px; }
-#ep-details input.ep-input-jsonkey{ width: 200px; }
+#ep-details input.ep-input-storage{ width: 180px; }
+#ep-details input.ep-input-jsonkey{ width: 220px; }
+#ep-details input#ep-selector-input{ flex:1; min-width:180px; }
+#ep-details select#ep-child-select { width: 220px; }
+#ep-details .ep-controls { display:flex; gap:8px; align-items:center; }
 #ep-details button {
 	padding: 8px 10px;
 	border-radius: 6px;
@@ -218,7 +238,6 @@
 	background: #07f;
 	color: #fff;
 	cursor: pointer;
-	margin-left: 8px;
 }
 #ep-details textarea{
 	width: 100%;
@@ -242,7 +261,6 @@
 	cursor: pointer;
 	background: rgba(255,255,255,0.03);
 	color: #fff;
-	margin-left: 6px;
 }
 .ep-saved-msg {
 	font-size: 12px;
@@ -265,6 +283,8 @@
 	padding: 12px;
 	box-shadow: 0 12px 34px rgba(0,0,0,0.6);
 	z-index: 2147484000;
+	max-height: calc(100vh - 80px);
+	overflow: auto;
 }
 #ep-sorter h4{ margin: 0 0 8px 0; }
 .ep-sorter-list { max-height: 320px; overflow: auto; margin-bottom: 8px; }
@@ -277,13 +297,59 @@
 .ep-sorter-item .sel-preview { font-family: monospace; font-size:12px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ep-sort-btn { padding:4px 6px; border-radius:6px; border:0; cursor:pointer; background: rgba(255,255,255,0.03); color:#fff; }
 @media (max-width:480px){
-	#ep-details{ width: calc(100% - 32px); left: 16px; right: 16px; bottom: 16px; }
+	#ep-details{ left:12px; right:12px; bottom:12px; padding:10px; }
 }
 `;
 		const style = document.createElement('style');
 		style.id = 'ep-styles';
 		style.textContent = css;
 		document.head.appendChild(style);
+	}
+
+	// highlight overlay (single instance used for hover & test)
+	let globalOverlay = null;
+	function ensureGlobalOverlay(){
+		if (globalOverlay && document.body.contains(globalOverlay)) return globalOverlay;
+		if (globalOverlay && !document.body.contains(globalOverlay)) globalOverlay = null;
+		globalOverlay = document.createElement('div');
+		globalOverlay.className = 'ep-highlight-overlay';
+		globalOverlay.style.transition = 'all 0.12s ease';
+		document.body.appendChild(globalOverlay);
+		return globalOverlay;
+	}
+
+	// small flash to show test success
+	function flashElement(el, duration = 700){
+		if(!el || el.nodeType !== 1) return;
+		const r = el.getBoundingClientRect();
+		const flash = document.createElement('div');
+		flash.style.position = 'fixed';
+		flash.style.left = (r.left + window.scrollX) + 'px';
+		flash.style.top = (r.top + window.scrollY) + 'px';
+		flash.style.width = (r.width) + 'px';
+		flash.style.height = (r.height) + 'px';
+		flash.style.zIndex = 2147484001;
+		flash.style.borderRadius = window.getComputedStyle(el).borderRadius || '6px';
+		flash.style.background = 'rgba(0,160,255,0.12)';
+		flash.style.boxShadow = '0 0 0 3px rgba(0,160,255,0.12) inset';
+		document.body.appendChild(flash);
+		setTimeout(()=> { try{ flash.remove(); }catch(e){} }, duration);
+	}
+
+	// small helper: center overlay on element
+	function highlightElement(el){
+		const overlay = ensureGlobalOverlay();
+		if (!el || el.nodeType !== 1) {
+			overlay.style.display = 'none';
+			return;
+		}
+		const r = el.getBoundingClientRect();
+		overlay.style.display = 'block';
+		overlay.style.left = `${r.left + window.scrollX}px`;
+		overlay.style.top = `${r.top + window.scrollY}px`;
+		overlay.style.width = `${r.width}px`;
+		overlay.style.height = `${r.height}px`;
+		overlay.style.borderRadius = window.getComputedStyle(el).borderRadius || '4px';
 	}
 
 	// main exported function
@@ -309,11 +375,11 @@
 		const closeBtn = notify.querySelector('.ep-close');
 		closeBtn.addEventListener('click', cleanup);
 
-		// Overlay highlight
-		const overlay = document.createElement('div');
-		overlay.className = 'ep-highlight-overlay';
-		overlay.setAttribute(UI_ATTR, '1');
-		document.body.appendChild(overlay);
+		// Overlay highlight (hover)
+		const hoverOverlay = document.createElement('div');
+		hoverOverlay.className = 'ep-highlight-overlay';
+		hoverOverlay.setAttribute(UI_ATTR, '1');
+		document.body.appendChild(hoverOverlay);
 
 		// Floater label
 		const floater = document.createElement('div');
@@ -329,15 +395,27 @@
 		details.style.display = 'none';
 		details.innerHTML = `
 			<h3>Element details</h3>
-			<div class="ep-row"><strong>Selector</strong></div>
-			<div class="ep-row">
-				<input type="text" id="ep-selector-input" readonly />
-				<button class="ep-mini" id="ep-copy-selector">Copy</button>
-			</div>
-			<div class="ep-row"><strong>Attributes</strong></div>
-			<textarea id="ep-attrs" readonly></textarea>
 
-			<div class="ep-row" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+			<div class="ep-row">
+				<div style="font-weight:600; min-width:85px;">Selector</div>
+				<input type="text" id="ep-selector-input" placeholder="CSS selector (editable)" />
+				<select id="ep-child-select"><option value="">-- show children --</option></select>
+				<div class="ep-controls">
+					<button id="ep-test-selector" class="ep-mini">Test</button>
+				</div>
+			</div>
+
+			<div class="ep-row">
+				<div style="font-weight:600; min-width:85px;">Attributes</div>
+				<textarea id="ep-attrs" readonly></textarea>
+			</div>
+
+			<div class="ep-row">
+				<div style="font-weight:600; min-width:85px;">Text content</div>
+				<textarea id="ep-text" readonly></textarea>
+			</div>
+
+			<div class="ep-row">
 				<input id="ep-storage-key" class="ep-input-storage" type="text" placeholder="LocalStorage key (default: selectorscfg)" value="selectorscfg" />
 				<input id="ep-json-key" class="ep-input-jsonkey" type="text" placeholder="JSON key (e.g. merged.el1)" />
 				<button id="ep-update" class="ep-mini">Update (overwrite)</button>
@@ -345,125 +423,75 @@
 				<button id="ep-open-sorter" class="ep-mini">Open sorter</button>
 				<button id="ep-close-details" class="ep-mini">Close</button>
 			</div>
+
 			<div id="ep-saved" class="ep-saved-msg" style="display:none"></div>
 		`;
 		document.body.appendChild(details);
 
-		// populate datalist with existing localStorage keys (not using datalist now; still fill for convenience if needed)
-		function refreshStorageDatalist() {
-			// reserved: could populate a datalist if you want; currently not used
-		}
-		refreshStorageDatalist();
-
-		// small helper: center overlay on element
-		function highlightElement(el){
-			if (!el || el.nodeType !== 1) {
-				overlay.style.display = 'none';
-				return;
-			}
-			const r = el.getBoundingClientRect();
-			overlay.style.display = 'block';
-			overlay.style.left = `${r.left + window.scrollX}px`;
-			overlay.style.top = `${r.top + window.scrollY}px`;
-			overlay.style.width = `${r.width}px`;
-			overlay.style.height = `${r.height}px`;
-			overlay.style.borderRadius = window.getComputedStyle(el).borderRadius || '4px';
+		// populate child dropdown with direct children
+		function populateChildDropdown(parentEl, parentSelector){
+			const sel = details.querySelector('#ep-child-select');
+			sel.innerHTML = '<option value="">-- show children --</option>';
+			if (!parentEl || !parentEl.children) return;
+			const children = Array.from(parentEl.children).slice(0, 200); // safety cap
+			children.forEach((child, idx) => {
+				const labelText = (child.tagName.toLowerCase() + (child.className ? ' .' + String(child.className).split(/\s+/).slice(0,2).join('.') : '')).slice(0,120);
+				const childRel = getSimpleChildSelector(child);
+				const value = parentSelector ? `${parentSelector} > ${childRel}` : childRel;
+				const opt = document.createElement('option');
+				opt.value = value;
+				opt.textContent = `${idx+1}. ${labelText}`;
+				sel.appendChild(opt);
+			});
 		}
 
-		let currentTarget = null;
-		let locked = false;
-
-		// show floater near mouse
-		function updateFloaterPos(x,y){
-			floater.style.left = `${x + 12}px`;
-			floater.style.top = `${y + 12}px`;
-			floater.style.opacity = '1';
-			floater.style.transform = 'translateY(0)';
-		}
-
-		function isOurUI(el){
-			return !!(el && (el.closest && el.closest('[data-ep-ui]')));
-		}
-
-		const onMouseMove = (ev) => {
-			if (locked) return;
-			const x = ev.clientX, y = ev.clientY;
-			updateFloaterPos(x,y);
-			let el = document.elementFromPoint(x, y);
-			if (isOurUI(el)){
-				highlightElement(null);
-				currentTarget = null;
-				return;
-			}
-			if (el && el !== currentTarget){
-				currentTarget = el;
-				highlightElement(el);
-			}
-		};
-
-		let clickState = 0;
-		let lastClickedEl = null;
-
-		const onClick = (ev) => {
-			if (isOurUI(ev.target)) return;
-			ev.preventDefault();
-			ev.stopPropagation();
-
-			const clicked = ev.target;
-			if (clickState === 0 || lastClickedEl !== clicked){
-				clickState = 1;
-				lastClickedEl = clicked;
-				const rect = clicked.getBoundingClientRect();
-				floater.textContent = 'Tap/click again on the same element to confirm selection';
-				floater.style.left = `${rect.left + window.scrollX + 8}px`;
-				floater.style.top = `${rect.top + window.scrollY - 28}px`;
-				floater.style.opacity = '1';
-				floater.style.transform = 'translateY(0)';
-				setTimeout(()=> {
-					floater.style.opacity = '0';
-					floater.style.transform = 'translateY(-6px)';
-				}, 1600);
-				return;
-			}
-
-			if (clickState === 1 && lastClickedEl === clicked){
-				locked = true;
-				const selector = getUniqueSelector(clicked);
-				const attrs = getAttributes(clicked);
-				details.style.display = 'block';
-				details.querySelector('#ep-selector-input').value = selector;
-				details.querySelector('#ep-attrs').value = JSON.stringify(attrs, null, 2);
-				details.scrollIntoView({behavior: 'smooth', block: 'end'});
-				const info = {
-					selector,
-					attributes: attrs,
-					tagName: clicked.tagName.toLowerCase(),
-					outerHTML: clicked.outerHTML,
-					timestamp: Date.now()
-				};
-				if (onConfirm) {
-					try { onConfirm(info); } catch(e){}
+		// small helper: set selector input and optionally test highlight
+		function setSelectorInputAndShow(selector, testImmediately){
+			const input = details.querySelector('#ep-selector-input');
+			input.value = selector || '';
+			if (testImmediately) {
+				try {
+					const match = document.querySelector(input.value);
+					if (match) {
+						highlightElement(match);
+						flashElement(match, 650);
+						// update attrs/text to the matched element
+						details.querySelector('#ep-attrs').value = JSON.stringify(getAttributes(match), null, 2);
+						details.querySelector('#ep-text').value = (match.textContent || '').trim();
+					} else {
+						showSavedMsg('No element matches that selector', true);
+					}
+				}catch(e){
+					showSavedMsg('Invalid selector', true);
 				}
-				resolvePromise(info);
-				highlightElement(clicked);
-				teardownPickListeners();
 			}
-		};
+		}
 
-		const onKeyDown = (ev) => {
-			if (ev.key === 'Escape') cleanup();
-		};
-
-		// copy selector button
-		const copyBtn = details.querySelector('#ep-copy-selector');
-		copyBtn.addEventListener('click', () => {
-			const v = details.querySelector('#ep-selector-input').value;
-			navigator.clipboard && navigator.clipboard.writeText(v).then(()=>{
-				showSavedMsg('Selector copied to clipboard');
-			}, ()=> showSavedMsg('Copied (fallback may be required)'));
+		// event: when user chooses a child from dropdown
+		details.querySelector('#ep-child-select').addEventListener('change', (ev) => {
+			const v = ev.target.value || '';
+			if (!v) return;
+			setSelectorInputAndShow(v, true);
 		});
 
-		// Save/Update helpers using storageKey and jsonKey
+		// Test button behavior - highlight what selector currently says
+		details.querySelector('#ep-test-selector').addEventListener('click', () => {
+			const s = details.querySelector('#ep-selector-input').value || '';
+			if (!s) { showSavedMsg('Selector is empty', true); return; }
+			try {
+				const el = document.querySelector(s);
+				if (!el) { showSavedMsg('No element found for that selector', true); return; }
+				highlightElement(el);
+				flashElement(el, 650);
+				// update attrs/text
+				details.querySelector('#ep-attrs').value = JSON.stringify(getAttributes(el), null, 2);
+				details.querySelector('#ep-text').value = (el.textContent || '').trim();
+			}catch(e){
+				showSavedMsg('Invalid selector', true);
+			}
+		});
+
+		// Save/Update helpers
 		function makePayload(){
 			return {
 				selector: details.querySelector('#ep-selector-input').value,
@@ -471,6 +499,7 @@
 					try { return JSON.parse(details.querySelector('#ep-attrs').value); } catch(e){ return details.querySelector('#ep-attrs').value; }
 				})(),
 				html: details.querySelector('#ep-attrs').value,
+				text: details.querySelector('#ep-text').value,
 				savedAt: new Date().toISOString()
 			};
 		}
@@ -504,14 +533,12 @@
 			} else if (existing === undefined || existing === null) {
 				list = [];
 			} else {
-				// if existing is object (single payload), convert to array
 				list = [ existing ];
 			}
 			list.push(payload);
 			obj[jsonKey] = list;
 			if (saveStorageObject(storageKey, obj)) {
 				showSavedMsg(`Appended to ${storageKey}[${jsonKey}]`);
-				// open sorter UI for that key
 				openSorter(storageKey, jsonKey, list);
 			} else {
 				showSavedMsg('Failed to append to localStorage', true);
@@ -527,7 +554,6 @@
 			const existing = obj[jsonKey];
 			if (!existing) { showSavedMsg('No existing value under that JSON key', true); return; }
 			if (!Array.isArray(existing)) {
-				// try to convert to array view: wrap single object
 				openSorter(storageKey, jsonKey, [existing]);
 			} else {
 				openSorter(storageKey, jsonKey, existing.slice());
@@ -550,7 +576,6 @@
 
 		// Sorter UI: simple modal with Up / Down / Delete / Save
 		function openSorter(storageKey, jsonKey, list){
-			// remove existing sorter if present
 			const existingModal = document.getElementById('ep-sorter');
 			if (existingModal) existingModal.remove();
 
@@ -569,7 +594,6 @@
 
 			const listWrap = modal.querySelector('.ep-sorter-list');
 
-			// Render list rows
 			function renderList(){
 				listWrap.innerHTML = '';
 				list.forEach((item, idx) => {
@@ -620,7 +644,6 @@
 
 			renderList();
 
-			// Save / Cancel handlers
 			modal.querySelector('#ep-sort-save').addEventListener('click', () => {
 				const obj = loadStorageObject(storageKey);
 				obj[jsonKey] = list;
@@ -636,6 +659,101 @@
 			});
 		}
 
+		// small helper to check if an element is part of our UI
+		function isOurUI(el){ return !!(el && (el.closest && el.closest('[data-ep-ui]'))); }
+
+		// Mouse move tracks hovered element and positions the floater
+		let currentTarget = null;
+		let locked = false;
+		function updateFloaterPos(x,y){
+			floater.style.left = `${x + 12}px`;
+			floater.style.top = `${y + 12}px`;
+			floater.style.opacity = '1';
+			floater.style.transform = 'translateY(0)';
+		}
+		const onMouseMove = (ev) => {
+			if (locked) return;
+			const x = ev.clientX, y = ev.clientY;
+			updateFloaterPos(x,y);
+			let el = document.elementFromPoint(x, y);
+			if (isOurUI(el)){
+				hoverOverlay.style.display = 'none';
+				currentTarget = null;
+				return;
+			}
+			if (el && el !== currentTarget){
+				currentTarget = el;
+				const r = el.getBoundingClientRect();
+				hoverOverlay.style.display = 'block';
+				hoverOverlay.style.left = `${r.left + window.scrollX}px`;
+				hoverOverlay.style.top = `${r.top + window.scrollY}px`;
+				hoverOverlay.style.width = `${r.width}px`;
+				hoverOverlay.style.height = `${r.height}px`;
+				hoverOverlay.style.borderRadius = window.getComputedStyle(el).borderRadius || '4px';
+			}
+		};
+
+		// click behavior
+		let clickState = 0;
+		let lastClickedEl = null;
+		const onClick = (ev) => {
+			if (isOurUI(ev.target)) return;
+			ev.preventDefault();
+			ev.stopPropagation();
+
+			const clicked = ev.target;
+			// first click
+			if (clickState === 0 || lastClickedEl !== clicked){
+				clickState = 1;
+				lastClickedEl = clicked;
+				const rect = clicked.getBoundingClientRect();
+				floater.textContent = 'Tap/click again on the same element to confirm selection';
+				floater.style.left = `${rect.left + window.scrollX + 8}px`;
+				floater.style.top = `${rect.top + window.scrollY - 28}px`;
+				floater.style.opacity = '1';
+				floater.style.transform = 'translateY(0)';
+				setTimeout(()=> {
+					floater.style.opacity = '0';
+					floater.style.transform = 'translateY(-6px)';
+				}, 1600);
+				return;
+			}
+
+			// second click on same element -> lock it
+			if (clickState === 1 && lastClickedEl === clicked){
+				locked = true;
+				const selector = getUniqueSelector(clicked);
+				const attrs = getAttributes(clicked);
+				details.style.display = 'block';
+				details.querySelector('#ep-selector-input').value = selector;
+				details.querySelector('#ep-attrs').value = JSON.stringify(attrs, null, 2);
+				details.querySelector('#ep-text').value = (clicked.textContent || '').trim();
+				details.scrollIntoView({behavior: 'smooth', block: 'end'});
+				// populate child dropdown
+				populateChildDropdown(clicked, selector);
+				const info = {
+					selector,
+					attributes: attrs,
+					tagName: clicked.tagName.toLowerCase(),
+					outerHTML: clicked.outerHTML,
+					text: (clicked.textContent || '').trim(),
+					timestamp: Date.now()
+				};
+				if (onConfirm) {
+					try { onConfirm(info); } catch(e){}
+				}
+				resolvePromise(info);
+				// set hover overlay to match clicked now
+				highlightElement(clicked);
+				teardownPickListeners();
+			}
+		};
+
+		// keyboard handler for cancel
+		const onKeyDown = (ev) => {
+			if (ev.key === 'Escape') cleanup();
+		};
+
 		// Setup listeners
 		let timerHandle = null;
 		function setupPickListeners(){
@@ -646,7 +764,6 @@
 				if (!locked) cleanup();
 			}, timerSeconds * 1000 + 100);
 		}
-
 		function teardownPickListeners(){
 			document.removeEventListener('mousemove', onMouseMove, true);
 			document.removeEventListener('click', onClick, true);
@@ -654,11 +771,13 @@
 		}
 
 		function cleanup(){
-			[notify, overlay, floater, details].forEach(el => { try{ el.remove(); }catch(e){} });
+			[notify, hoverOverlay, floater, details].forEach(el => { try{ el.remove(); }catch(e){} });
 			const sorter = document.getElementById('ep-sorter'); if (sorter) sorter.remove();
 			teardownPickListeners();
 			if (timerHandle) { clearTimeout(timerHandle); timerHandle = null; }
 			resolvePromise(null);
+			// also remove global overlay if present
+			try { if (globalOverlay) { globalOverlay.remove(); globalOverlay = null; } } catch(e){}
 		}
 
 		// Promise support
