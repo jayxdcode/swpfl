@@ -1,11 +1,9 @@
 /*
- Element Picker — UMD build (v1.3.0)
+ Element Picker — UMD build (v1.3.1)
  - Exports: startElementPicker
- - Children list walks when you pick a child; includes ".. (parent)" to go up
- - Sorter is draggable (HTML5 DnD)
- - Storage: values stored as a single comma-separated string under storageKey -> jsonKey
-    e.g. localStorage['selectorscfg'] = { "merged.el1": "selA, selB, selC" }
- Version: 1.3.0
+ - Fix: dotted JSON keys create nested objects (e.g. "merged.titleEl" -> obj.merged.titleEl)
+ - Automatically sets top-level `lastUpd` (ISO 8601 UTC) and `site` (location.hostname) on save
+ Version: 1.3.1
 */
 (function (root, factory) {
 	if (typeof define === 'function' && define.amd) {
@@ -17,7 +15,7 @@
 	}
 }(typeof self !== 'undefined' ? self : this, function () {
 
-	const VERSION = '1.3.0';
+	const VERSION = '1.3.1';
 
 	if (typeof globalThis !== 'undefined' && globalThis.__elementPickerLoaded) {
 		if (globalThis.startElementPicker) {
@@ -30,7 +28,7 @@
 	// Utility
 	const cssEscape = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/([ !"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
 
-	// Unique selector generator
+	// Unique selector generator (same as before)
 	function getUniqueSelector(el){
 		if(!el || el.nodeType !== 1) return '';
 		if (el.id) return `#${cssEscape(el.id)}`;
@@ -119,6 +117,29 @@
 		}
 	}
 
+	// Nested path helpers (dot notation)
+	function getNested(obj, path){
+		if (!path) return obj;
+		const parts = String(path).split('.');
+		let cur = obj;
+		for (let p of parts){
+			if (cur == null) return undefined;
+			cur = cur[p];
+		}
+		return cur;
+	}
+	function setNested(obj, path, value){
+		if (!path) return;
+		const parts = String(path).split('.');
+		let cur = obj;
+		for (let i=0;i<parts.length-1;i++){
+			const p = parts[i];
+			if (cur[p] == null || typeof cur[p] !== 'object') cur[p] = {};
+			cur = cur[p];
+		}
+		cur[parts[parts.length-1]] = value;
+	}
+
 	// inject styles
 	function injectStyles(){
 		if (document.getElementById('ep-styles')) return;
@@ -141,7 +162,7 @@
 		document.head.appendChild(style);
 	}
 
-	// global overlay used by highlight/test
+	// overlay helpers
 	let globalOverlay = null;
 	function ensureGlobalOverlay(){
 		if (globalOverlay && document.body.contains(globalOverlay)) return globalOverlay;
@@ -183,26 +204,23 @@
 		overlay.style.borderRadius = window.getComputedStyle(el).borderRadius || '4px';
 	}
 
-	// split/join helpers for storage string lists
+	// split/join helpers (for sorter)
 	function splitSelectorsString(s){
 		if (!s && s !== '') return [];
 		if (Array.isArray(s)) return s.map(String);
 		try {
-			// if old format (array stored), convert
 			if (typeof s === 'object' && s !== null) {
-				// try to map selector props if possible
 				return Object.values(s).map(v => (v && v.selector) ? v.selector : String(v));
 			}
 		}catch(e){}
 		if (typeof s !== 'string') s = String(s || '');
-		// split by comma, newline, or semicolon
 		return s.split(/\s*(?:,|\n|;)\s*/).map(x=>x.trim()).filter(x=>x.length>0);
 	}
 	function joinSelectorsString(list){
 		return list.map(x => String(x).trim()).filter(x=>x.length>0).join(', ');
 	}
 
-	// main function
+	// main start function
 	function startElementPicker(opts = {}){
 		injectStyles();
 		const onConfirm = typeof opts.onConfirm === 'function' ? opts.onConfirm : null;
@@ -263,9 +281,9 @@
 			</div>
 			<div class="ep-row">
 				<input id="ep-storage-key" class="ep-input-storage" type="text" placeholder="LocalStorage key (default: selectorscfg)" value="selectorscfg" />
-				<input id="ep-json-key" class="ep-input-jsonkey" type="text" placeholder="JSON key (e.g. merged.el1)" />
+				<input id="ep-json-key" class="ep-input-jsonkey" type="text" placeholder="JSON key (e.g. merged.titleEl)" />
 				<button id="ep-update" class="ep-mini">Update (overwrite)</button>
-				<button id="ep-add" class="ep-mini">Add to existing</button>
+				<button id="ep-add" class="ep-mini">Add (append)</button>
 				<button id="ep-open-sorter" class="ep-mini">Open sorter</button>
 				<button id="ep-close-details" class="ep-mini">Close</button>
 			</div>
@@ -273,12 +291,12 @@
 		`;
 		document.body.appendChild(details);
 
-		// helper to populate child dropdown (walking)
+		// populate child dropdown (walking)
 		function populateChildDropdown(parentEl, parentSelector){
 			const sel = details.querySelector('#ep-child-select');
 			sel.innerHTML = '<option value="">-- show children --</option>';
 			if (!parentEl || parentEl.nodeType !== 1) return;
-			// parent option to go up
+			// ".. (parent)" option
 			const p = parentEl.parentElement;
 			if (p) {
 				const parentSel = getUniqueSelector(p);
@@ -299,14 +317,14 @@
 			});
 		}
 
-		// set selector input and optionally test
+		// set selector input and optionally test (updates children list too)
 		function setSelectorInputAndShow(selector, testImmediately){
 			const input = details.querySelector('#ep-selector-input');
 			input.value = selector || '';
 			if (testImmediately) {
 				try {
 					const match = document.querySelector(input.value);
-					if (match) {
+					if (match){
 						highlightElement(match);
 						flashElement(match, 650);
 						details.querySelector('#ep-attrs').value = JSON.stringify(getAttributes(match), null, 2);
@@ -321,7 +339,7 @@
 			}
 		}
 
-		// handle child dropdown change: supports __UP__ token
+		// child selection behavior (walks and supports __UP__)
 		details.querySelector('#ep-child-select').addEventListener('change', (ev) => {
 			const val = ev.target.value || '';
 			if (!val) return;
@@ -331,7 +349,6 @@
 				setSelectorInputAndShow(parentSelector, true);
 				return;
 			}
-			// otherwise it's a child selector; set and walk into it
 			setSelectorInputAndShow(val, true);
 		});
 
@@ -352,55 +369,62 @@
 			}
 		});
 
-		// Save / Add behavior (string-based)
+		// make selector string for storing
 		function makeSelectorString(){
 			return (details.querySelector('#ep-selector-input').value || '').trim();
 		}
 
+		// Update (overwrite) — writes nested path and sets lastUpd & site
 		const updateBtn = details.querySelector('#ep-update');
 		updateBtn.addEventListener('click', () => {
 			const storageKey = (details.querySelector('#ep-storage-key').value || 'selectorscfg').trim();
 			const jsonKey = (details.querySelector('#ep-json-key').value || '').trim();
-			if (!jsonKey) { showSavedMsg('Enter a JSON key (e.g. merged.el1)', true); return; }
+			if (!jsonKey) { showSavedMsg('Enter a JSON key (e.g. merged.titleEl)', true); return; }
 			const obj = loadStorageObject(storageKey);
-			obj[jsonKey] = makeSelectorString();
+			// set metadata
+			try { obj.lastUpd = new Date().toISOString(); } catch(e){}
+			try { obj.site = location.hostname || ''; } catch(e){}
+			setNested(obj, jsonKey, makeSelectorString());
 			if (saveStorageObject(storageKey, obj)) {
-				showSavedMsg(`Saved as ${storageKey}[${jsonKey}]`);
+				showSavedMsg(`Saved as ${storageKey}.${jsonKey}`);
 			} else {
 				showSavedMsg('Failed to save to localStorage', true);
 			}
 		});
 
-		// Add: append selector string to existing string (comma-separated)
+		// Add (append) — appends a selector to comma-separated string at nested path
 		const addBtn = details.querySelector('#ep-add');
 		addBtn.addEventListener('click', () => {
 			const storageKey = (details.querySelector('#ep-storage-key').value || 'selectorscfg').trim();
 			const jsonKey = (details.querySelector('#ep-json-key').value || '').trim();
-			if (!jsonKey) { showSavedMsg('Enter a JSON key (e.g. merged.el1)', true); return; }
+			if (!jsonKey) { showSavedMsg('Enter a JSON key (e.g. merged.titleEl)', true); return; }
 			const obj = loadStorageObject(storageKey);
-			const existing = obj[jsonKey];
-			const currentList = splitSelectorsString(existing);
+			const existing = getNested(obj, jsonKey);
+			const list = splitSelectorsString(existing);
 			const payloadSelector = makeSelectorString();
 			if (!payloadSelector) { showSavedMsg('Selector is empty', true); return; }
-			currentList.push(payloadSelector);
-			obj[jsonKey] = joinSelectorsString(currentList);
+			list.push(payloadSelector);
+			// set metadata & joined string
+			try { obj.lastUpd = new Date().toISOString(); } catch(e){}
+			try { obj.site = location.hostname || ''; } catch(e){}
+			setNested(obj, jsonKey, joinSelectorsString(list));
 			if (saveStorageObject(storageKey, obj)) {
-				showSavedMsg(`Appended selector to ${storageKey}[${jsonKey}]`);
-				openSorter(storageKey, jsonKey, currentList.slice());
+				showSavedMsg(`Appended selector to ${storageKey}.${jsonKey}`);
+				openSorter(storageKey, jsonKey, list.slice());
 			} else {
 				showSavedMsg('Failed to append to localStorage', true);
 			}
 		});
 
-		// open sorter (draggable)
+		// Open sorter: reads nested path, opens DnD modal for reordering string list
 		details.querySelector('#ep-open-sorter').addEventListener('click', () => {
 			const storageKey = (details.querySelector('#ep-storage-key').value || 'selectorscfg').trim();
 			const jsonKey = (details.querySelector('#ep-json-key').value || '').trim();
-			if (!jsonKey) { showSavedMsg('Enter a JSON key (e.g. merged.el1)', true); return; }
+			if (!jsonKey) { showSavedMsg('Enter a JSON key (e.g. merged.titleEl)', true); return; }
 			const obj = loadStorageObject(storageKey);
-			const existing = obj[jsonKey];
-			if (!existing) { showSavedMsg('No existing value under that JSON key', true); return; }
-			const list = splitSelectorsString(existing);
+			const raw = getNested(obj, jsonKey);
+			if (raw === undefined) { showSavedMsg('No existing value under that JSON key', true); return; }
+			const list = splitSelectorsString(raw);
 			openSorter(storageKey, jsonKey, list.slice());
 		});
 
@@ -426,7 +450,7 @@
 			modal.id = 'ep-sorter';
 			modal.setAttribute(UI_ATTR, '1');
 			modal.innerHTML = `
-				<h4>Sort selectors — ${storageKey}[${jsonKey}]</h4>
+				<h4>Sort selectors — ${storageKey}.${jsonKey}</h4>
 				<div class="ep-sorter-list" id="ep-sorter-list"></div>
 				<div style="display:flex; gap:8px; justify-content:flex-end;">
 					<button id="ep-sort-save" class="ep-mini">Save</button>
@@ -437,7 +461,6 @@
 
 			const listWrap = modal.querySelector('#ep-sorter-list');
 
-			// Render (with drag handlers)
 			function renderList(){
 				listWrap.innerHTML = '';
 				list.forEach((item, idx) => {
@@ -451,7 +474,6 @@
 					preview.title = item;
 					preview.textContent = item;
 
-					// edit inline text input
 					const input = document.createElement('input');
 					input.type = 'text';
 					input.value = item;
@@ -519,11 +541,13 @@
 
 			modal.querySelector('#ep-sort-save').addEventListener('click', () => {
 				const obj = loadStorageObject(storageKey);
-				// normalize strings
+				// set metadata
+				try { obj.lastUpd = new Date().toISOString(); } catch(e){}
+				try { obj.site = location.hostname || ''; } catch(e){}
 				const joined = joinSelectorsString(list);
-				obj[jsonKey] = joined;
+				setNested(obj, jsonKey, joined);
 				if (saveStorageObject(storageKey, obj)) {
-					showSavedMsg(`Saved order to ${storageKey}[${jsonKey}]`);
+					showSavedMsg(`Saved order to ${storageKey}.${jsonKey}`);
 					modal.remove();
 				} else {
 					showSavedMsg('Failed to save sorted list', true);
@@ -534,10 +558,9 @@
 			});
 		}
 
-		// check if element is part of UI
+		// isOurUI and pick handlers (unchanged besides using nested helpers where needed)
 		function isOurUI(el){ return !!(el && (el.closest && el.closest('[data-ep-ui]'))); }
 
-		// hover & click handlers for picking
 		let currentTarget = null;
 		let locked = false;
 		function updateFloaterPos(x,y){
