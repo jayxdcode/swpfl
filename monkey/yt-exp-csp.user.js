@@ -20,8 +20,8 @@
 // @require      https://raw.githubusercontent.com/jayxdcode/swpfl/refs/heads/main/js/elementPicker.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.7/purify.min.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=music.youtube.com
-// @downloadURL  https://raw.githubusercontent.com/jayxdcode/swpfl/refs/heads/main/yt-exp-csp.user.js?dl=true
-// @updateURL    https://raw.githubusercontent.com/jayxdcode/swpfl/refs/heads/main/yt-exp-csp.user.js?dl=true
+// @downloadURL  https://raw.githubusercontent.com/jayxdcode/swpfl/refs/heads/main/monkey/yt-exp-csp.user.js?dl=true
+// @updateURL    https://raw.githubusercontent.com/jayxdcode/swpfl/refs/heads/main/monkey/yt-exp-csp.user.js?dl=true
 // ==/UserScript==
 
 (function() {
