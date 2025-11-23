@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Music Floating Lyrics
 // @namespace    http://tampermonkey.net/
-// @version      2.0.4-CSP
+// @version      2.1.0-CSP
 // @description  YT Music version of SWPFL. Synced lyrics with translation/romanization resizable/draggable panel, themed, opacity control. Translations are provided by Gemini 2.0 Flash and 1.5 Flash via the Google AI Studio API (Accessed via a remote server).
 // @author       jayxdcode
 // @match        https://music.youtube.com/*
@@ -26,37 +26,37 @@
 
 (function() {
     'use strict';
-    
+
     // -- begin --
     try {
-        GM_notification({ text: '[2.0.4-CSP] Script Started..', title: 'Userscript Alert', timeout: 7500, onclick: () => { console.log('Notification clicked!'); }, ondone: (wasClicked) => { console.log(`Notification closed. Clicked: ${wasClicked}`); } });
-        
-        const YTML_VERSION = '2.0.4-CSP';
+        const YTML_VERSION = '2.1.0-CSP';
         const YTML_USER_AGENT = `YTML (user.js release) v${YTML_VERSION} (https://github.com/jayxdcode/swpfl)`;
-        
+
         const LRCLIB_HEADERS = {
             'User-Agent': YTML_USER_AGENT,
             'Accept': "application/json"
         };
-        
+
+        GM_notification({ text: `${YTML_VERSION} Script Started..`, title: 'Userscript Alert', timeout: 7500, onclick: () => { console.log('Notification clicked!'); }, ondone: (wasClicked) => { console.log(`Notification closed. Clicked: ${wasClicked}`); } });
+
         const mobileDebug = false; // only set to true if you have eruda.
         let got = false
-        
+
         /*
         developer flags. keep all ``toggle``s to false in release unless you know what you are doing.
         */
-        
+
         let prefs = {
             activeBeta: {
                 lrcNotif: false, // toggle
             },
-            
+
             devOps: false, // toggle
             // local development experiment. doesnt do anything if you are not the developer (may throw an error tho)
-            
+
             ws: false, // toggle
             wsLastSent: null,
-            
+
             lrcNotif: {
                 silent: false,
                 singleMode: true,
@@ -64,9 +64,9 @@
                 maxNotifs: 5,
             },
         }
-        
+
         // *** ENDING OF developer flags ***
-        
+
         /*
         UPDATE v2.9.2 (from swpfl): added all querySelectors in one area for easier patches when site changes querySelectors. (Also for reusing code for other sites like YTM)
         */
@@ -90,10 +90,10 @@
                 "ytmusic-app > #layout > ytmusic-player-bar.style-scope.ytmusic-app > div.middle-controls.style-scope.ytmusic-player-bar:nth-of-type(2) > div.content-info-wrapper.style-scope.ytmusic-player-bar:nth-of-type(2) > span.byline-wrapper.style-scope.ytmusic-player-bar > span.subtitle.style-scope.ytmusic-player-bar:nth-of-type(2) > yt-formatted-string.byline.style-scope.ytmusic-player-bar.complex-string > a.yt-simple-endpoint.style-scope.yt-formatted-string:nth-of-type(2)"
             ]
         }
-        
+
         // Replace the broken cfgUtil with this:
         const cfgUtil = (mvar) => Array.isArray(mvar) ? mvar : (mvar ? [mvar] : []);
-        
+
         // helper: try selectors in order and return first matching element (or null)
         function queryFirst(selOrArray, root = document) {
             if (!selOrArray) return null;
@@ -109,7 +109,7 @@
             }
             return null;
         }
-        
+
         /*
         UPDATE v1.3.1: phase 1 - using localStorage to have editing capabilities for advance users and devs
         */
@@ -127,16 +127,16 @@
                 return defSel;
             }
         })();
-        
+
         const BACKEND_URL = "https://src-backend.onrender.com/api/translate";
-        
+
         const POLL_INTERVAL = 1000;
         const STORAGE_KEY = 'tm-lyrics-panel-position';
         const SIZE_KEY = 'tm-lyrics-panel-size';
         const THEME_KEY = 'tm-lyrics-theme';
         const OPACITY_KEY = 'tm-lyrics-opacity';
         const CONFIG_KEY = 'tm-lyrics-config';
-        
+
         const compWindow = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
         let lyricsConfig = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
         let lastCandidates = [];
@@ -153,19 +153,19 @@
         let currentOpacity = parseFloat(localStorage.getItem(OPACITY_KEY)) || 0.85;
         let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
         let lastRenderedIdx = -1;
-        
+
         let logVisible = false
-        
+
         let dur = 0;
         let playbackPos = 0;
-        
+
         const fallbackSync = true;
-        
+
         let notifExists = false;
         let notifIdx = 0;
-        
+
         const delayTune = 0; // How much delay do you observe? (in ms)
-        
+
         // Icon style (Material Icons)
         GM_addStyle(`
 @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
@@ -195,7 +195,7 @@
   font-feature-settings: 'liga';
 }
 `);
-        
+
         /**
          * Creates and inserts a CSP-safe element, leveraging Trusted Types and DOMPurify for robust security.
          *
@@ -212,122 +212,93 @@
          * @returns {HTMLElement|null} The created element, or null if creation failed.
          */
         function createCSPSafeElement(parent, tagName, attributes = {}, content = '') {
-            // Check for DOMPurify dependency
+            // Ensure DOMPurify is present (you already @require it, but check at runtime)
             if (typeof DOMPurify === 'undefined') {
                 console.error('DOMPurify is required for CSP-safe element creation using sanitization.');
                 return null;
             }
-            
-            // 1. Resolve the parent element
+
+            // Resolve parent
             let parentEl = parent;
-            if (typeof parent === 'string') {
-                parentEl = document.querySelector(parent);
-            }
-            
+            if (typeof parent === 'string') parentEl = document.querySelector(parent);
+
+            // If parent is not found, attach to body but warn (prevents silent failure)
             if (!parentEl) {
-                console.error('Parent element not found.');
-                return null;
+                console.warn(`createCSPSafeElement: parent "${parent}" not found — appending to document.body instead.`);
+                parentEl = document.body;
             }
-            
-            // 2. Create the new element
+
             const newElement = document.createElement(tagName);
             const isScript = tagName.toLowerCase() === 'script';
-            
-            // 3. Apply attributes
+
+            // Apply attributes
             for (const key in attributes) {
-                if (attributes.hasOwnProperty(key)) {
+                if (Object.prototype.hasOwnProperty.call(attributes, key)) {
                     newElement.setAttribute(key, attributes[key]);
                 }
             }
-            
-            // 4. Handle Content Insertion (The CSP-Safe Part)
-            
-            // Check if Trusted Types API is available and active
-            if (typeof trustedTypes !== 'undefined' && content) {
-                try {
-                    // A. Create a secure policy using DOMPurify for sanitation
+
+            // If content is empty, just append and return
+            if (!content) {
+                parentEl.appendChild(newElement);
+                return newElement;
+            }
+
+            // Trusted Types + DOMPurify path (preferred)
+            try {
+                if (typeof trustedTypes !== 'undefined') {
                     const policy = trustedTypes.createPolicy('csp-safe-purify', {
-                        // Policy for innerHTML content
-                        createHTML: (html) => {
-                            // Sanitize the HTML content using DOMPurify before converting to a TrustedHTML object
-                            return DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: true });
-                        },
-                        
-                        // Policy for script content (inline scripts)
-                        createScript: (scriptContent) => {
-                            // For script content, we might not need DOMPurify if we trust the source. 
-                            // However, we return it as a TrustedScript to satisfy CSP.
-                            // *A real-world application should validate this content source carefully.*
-                            return scriptContent;
-                        },
-                        
-                        // Policy for script source URLs (script tags with 'src' attribute)
+                        createHTML: (html) => DOMPurify.sanitize(html, { RETURN_TRUSTED_TYPE: true }),
+                        createScript: (s) => s,
                         createScriptURL: (url) => {
-                            // Ensure the URL is allowed. In a production app, you would check 
-                            // if the URL belongs to a trusted domain (e.g., allowlist).
-                            if (url.startsWith('https://trusted-cdn.com/') || url.startsWith('/')) {
-                                return url;
-                            }
-                            console.warn(`CSP-safe element creator blocked untrusted script URL: ${url}`);
-                            return ''; // Block untrusted URLs
+                            if (url.startsWith('https://trusted-cdn.com/') || url.startsWith('/')) return url;
+                            console.warn(`Blocked untrusted script URL: ${url}`);
+                            return '';
                         }
                     });
-                    
-                    // Apply content based on the element type
+
                     if (isScript) {
+                        // for script elements prefer src since inline scripts are often blocked
                         if (newElement.hasAttribute('src')) {
-                            // Use createScriptURL for 'src' attribute
                             const trustedUrl = policy.createScriptURL(newElement.getAttribute('src'));
-                            newElement.setAttribute('src', trustedUrl);
-                        } else if (content) {
-                            // Use createScript for inline script content
-                            const trustedScript = policy.createScript(content);
-                            newElement.textContent = trustedScript;
+                            if (trustedUrl) newElement.setAttribute('src', trustedUrl);
+                        } else {
+                            // Avoid adding inline scripts if possible
+                            console.warn('createCSPSafeElement: inline scripts are discouraged under CSP/trustedTypes.');
                         }
-                    } else if (content) {
-                        // Use createHTML for non-script elements (innerHTML)
-                        const trustedContent = policy.createHTML(content);
-                        newElement.innerHTML = trustedContent;
+                    } else {
+                        newElement.innerHTML = policy.createHTML(content);
                     }
-                    
-                } catch (e) {
-                    // Fallback if Trusted Types fails or policy is disallowed
-                    console.error('Trusted Types operation failed. Falling back to textContent/blocking script.', e);
-                    if (!isScript && content) {
-                        newElement.textContent = content;
-                    } else if (isScript) {
-                        // If the script fails Trusted Types, we cannot safely load it, so we prevent insertion
-                        return null;
-                    }
+
+                    parentEl.appendChild(newElement);
+                    return newElement;
                 }
-                
-            } else if (content) {
-                // B. Fallback: If Trusted Types is not available
-                if (isScript) {
-                    // If Trusted Types isn't available, script insertion is too risky without manual checks
-                    console.warn('Cannot safely insert script element without Trusted Types. Blocking content.');
-                    return null;
-                } else {
-                    // Use textContent for non-script elements to prevent XSS
-                    newElement.textContent = content;
-                }
+            } catch (e) {
+                console.warn('Trusted Types path failed, falling back to DOMPurify innerHTML', e);
             }
-            
-            // 5. Append the new element
-            parentEl.appendChild(newElement);
-            
-            return newElement;
+
+            // Fallback: use DOMPurify.sanitize -> innerHTML (safer than textContent for intended markup)
+            try {
+                newElement.innerHTML = DOMPurify.sanitize(content);
+                parentEl.appendChild(newElement);
+                return newElement;
+            } catch (e) {
+                console.error('createCSPSafeElement fallback failed — using textContent as last resort', e);
+                newElement.textContent = content;
+                parentEl.appendChild(newElement);
+                return newElement;
+            }
         }
-        
-        
+
+
         // ---- cancellation helpers (insert near other top-level globals) ----
         const gmFetchControllers = new Map(); // key -> [AbortController, ...] (supports multiple controllers per key)
-        
+
         function addController(key, controller) {
             if (!gmFetchControllers.has(key)) gmFetchControllers.set(key, []);
             gmFetchControllers.get(key).push(controller);
         }
-        
+
         function removeController(key, controller) {
             const arr = gmFetchControllers.get(key);
             if (!arr) return;
@@ -335,7 +306,7 @@
             if (i !== -1) arr.splice(i, 1);
             if (arr.length === 0) gmFetchControllers.delete(key);
         }
-        
+
         /**
          * Abort all controllers under `key`
          */
@@ -350,7 +321,7 @@
             gmFetchControllers.delete(key);
             console.log(`[Lyrics] Aborted fetches for key: ${key}`);
         }
-        
+
         /*******************
          * Abort everything *
          ********************/
@@ -358,7 +329,7 @@
             for (const key of Array.from(gmFetchControllers.keys())) abortFetch(key);
             console.log('[Lyrics] Aborted ALL fetches');
         }
-        
+
         // --- Utility Functions ---
         function debounce(func, wait) {
             let timeout;
@@ -371,9 +342,9 @@
                 timeout = setTimeout(later, wait);
             };
         }
-        
+
         // EXTENSION COMPATIBILITY  --- cors bypass patch ---
-        
+
         /**
          * Custom fetch-like function that routes requests through the background script
          * to potentially bypass CORS or handle other privileged operations.
@@ -411,7 +382,7 @@
                             }
                         }
                     }
-                    
+
                     // If 'input' is a Request object, you might want to extract its URL and init properties
                     let requestUrl = input;
                     if (input instanceof Request) {
@@ -422,14 +393,14 @@
                             ...serializedInit
                         };
                     }
-                    
-                    
+
+
                     const responseFromBackground = await browser.runtime.sendMessage({
                         action: "makeFetchRequest",
                         url: requestUrl,
                         init: serializedInit
                     });
-                    
+
                     // Handle errors or non-OK responses from the background script
                     if (responseFromBackground.error) {
                         const error = new Error(responseFromBackground.error || "Background fetch failed");
@@ -438,7 +409,7 @@
                         reject(error);
                         return;
                     }
-                    
+
                     // Reconstruct a Response object from the data sent by the background script
                     const mockResponse = {
                         ok: responseFromBackground.ok,
@@ -466,59 +437,59 @@
                         })),
                         arrayBuffer: () => Promise.resolve(new TextEncoder().encode(responseFromBackground.textData).buffer)
                     };
-                    
+
                     // Add these for compatibility
                     mockResponse.responseText = responseFromBackground.textData;
                     mockResponse.ok = responseFromBackground.ok;
                     mockResponse.status = responseFromBackground.status;
                     mockResponse.url = responseFromBackground.url || requestUrl;
-                    
+
                     resolve(mockResponse);
-                    
+
                 } catch (error) {
                     debug("Error in fetchViaBackground:", error);
                     reject(error); // Handle errors from sendMessage or content script logic
                 }
             });
         }
-        
+
         // --- Panel viewport adjustment logic ---
         function handleViewportChange() {
             const panel = document.getElementById('tm-lyrics-panel');
             if (!panel) return;
-            
+
             const rect = panel.getBoundingClientRect();
             const winWidth = window.innerWidth;
             const winHeight = window.innerHeight;
-            
+
             const isOutOfBounds =
                 rect.left < 0 ||
                 rect.top < 0 ||
                 rect.right > winWidth ||
                 rect.bottom > winHeight;
-            
+
             const isTooLarge =
                 rect.width > winWidth ||
                 rect.height > winHeight;
-            
+
             if (isOutOfBounds || isTooLarge) {
                 window.debug('Panel is out of bounds or too large for viewport. Adjusting...');
-                
+
                 // Clamp size to fit viewport with a small margin
                 const newWidth = Math.min(rect.width, winWidth - 20);
                 const newHeight = Math.min(rect.height, winHeight - 20);
                 panel.style.width = newWidth + 'px';
                 panel.style.height = newHeight + 'px';
-                
+
                 // Re-check rect after resize
                 const newRect = panel.getBoundingClientRect();
-                
+
                 // Clamp position to keep the panel fully inside the viewport
                 const newLeft = Math.max(10, Math.min(newRect.left, winWidth - newRect.width - 10));
                 const newTop = Math.max(10, Math.min(newRect.top, winHeight - newRect.height - 10));
                 panel.style.left = newLeft + 'px';
                 panel.style.top = newTop + 'px';
-                
+
                 localStorage.setItem(STORAGE_KEY, JSON.stringify({
                     left: panel.style.left,
                     top: panel.style.top
@@ -529,7 +500,7 @@
                 }));
             }
         }
-        
+
         // --- Manual Lyrics Menu ---
         function showManualLyricsMenu(trackKey) {
             try {
@@ -548,7 +519,7 @@
                     }
                     return;
                 }
-                
+
                 // Add blur overlay
                 const existingOverlay = document.getElementById('tm-manual-overlay');
                 if (existingOverlay) existingOverlay.remove();
@@ -569,10 +540,10 @@
                     menu.remove();
                 };
                 document.body.appendChild(overlay);
-                
+
                 // Remove any existing menu
                 document.getElementById('tm-manual-menu')?.remove();
-                
+
                 // Container
                 const menu = document.createElement('div');
                 menu.id = 'tm-manual-menu';
@@ -594,7 +565,7 @@
                     boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
                 });
                 document.body.appendChild(menu);
-                
+
                 // Header with title & close
                 const header = document.createElement('div');
                 header.textContent = 'Choose Lyrics Source';
@@ -621,7 +592,7 @@
                 };
                 header.appendChild(closeBtn);
                 menu.appendChild(header);
-                
+
                 // Scrollable list
                 const list = document.createElement('div');
                 Object.assign(list.style, {
@@ -630,10 +601,10 @@
                     padding: '8px'
                 });
                 menu.appendChild(list);
-                
+
                 function create(idx, lrcS, lrcP) {
                     const isSynced = !!lrcS;
-                    
+
                     const panel = document.createElement('div');
                     Object.assign(panel.style, {
                         background: '#333',
@@ -641,7 +612,7 @@
                         marginBottom: '8px',
                         overflow: 'hidden'
                     });
-                    
+
                     // Summary row
                     const summary = document.createElement('div');
                     Object.assign(summary.style, {
@@ -653,24 +624,21 @@
                     });
                     // summary.innerHTML = `<span>Candidate ${idx + 1} <input type="button" id="toggle-${idx}" style="margin-left: 1em; size: .75em;" ${isSynced ? 'value="SYNCED"': 'value="PLAIN only" disabled'} /></span><span style="font-size:12px; opacity:.7;">▼</span>`;
                     const mainSpan = createCSPSafeElement(summary, 'span', {});
-                    createCSPSafeElement(mainSpan, 'text', {
-                        textContent: `Candidate ${idx + 1} `
-                    });
+                    createCSPSafeElement(mainSpan, 'text', {}, `Candidate ${idx + 1}`);
                     const buttonValue = isSynced ? 'SYNCED' : 'PLAIN only';
-                    const buttonDisabled = isSynced ? null : 'disabled';
+                    const buttonDisabled = isSynced ? false : true;
                     createCSPSafeElement(mainSpan, 'input', {
                         type: 'button',
                         id: `toggle-${idx}`,
-                        style: 'margin-left: 1em; size: .75em;',
+                        style: 'margin-left: 1em; font-size: .75em;',
                         value: buttonValue,
-                        disabled: buttonDisabled
+                        ...(!isSynced && { disabled: "true" })
                     });
                     createCSPSafeElement(summary, 'span', {
                         style: 'font-size:12px; opacity:.7;',
-                        textContent: '▼'
-                    });
+                    }, '▼');
                     // Exp C
-                    
+
                     // ttp is short for Transform to plain
                     function ttp(lrc) {
                         return lrc
@@ -679,12 +647,12 @@
                             .map(l => l.replace(/\[.*?\]/g, "")) // use .map to transform
                             .join("\n");
                     }
-                    
+
                     panel.appendChild(summary);
-                    
+
                     // 3-line preview
                     const preview = document.createElement('pre');
-                    
+
                     preview.id = `prev${idx}`;
                     preview.textContent = (isSynced ? lrcS : lrcP).split("\n").slice(0, 3).join('\n');
                     Object.assign(preview.style, {
@@ -695,10 +663,10 @@
                         color: '#ccc'
                     });
                     panel.appendChild(preview);
-                    
+
                     // Body (hidden full lyrics)
                     const body = document.createElement('pre');
-                    
+
                     body.id = `item${idx}`;
                     body.textContent = isSynced ? lrcS : lrcP;
                     Object.assign(body.style, {
@@ -711,7 +679,7 @@
                         background: '#2b2b2b'
                     });
                     panel.appendChild(body);
-                    
+
                     // Toggle on click
                     summary.onclick = () => {
                         const isOpen = body.style.display === 'block';
@@ -719,7 +687,7 @@
                         summary.querySelector('span:last-child').textContent = isOpen ? '▼' : '▲';
                         updateUseBtnState();
                     };
-                    
+
                     // Only add click handler if synced
                     if (isSynced) {
                         let toggleEl = summary.querySelector(`#toggle-${idx}`);
@@ -729,9 +697,9 @@
                                 const prevEl = document.querySelector(`#prev${idx}`);
                                 const itemEl = document.querySelector(`#item${idx}`);
                                 if (!prevEl || !itemEl) return;
-                                
+
                                 const isCurrentlySynced = String(event.target.value || "").startsWith("SYNCED");
-                                
+
                                 if (isCurrentlySynced) {
                                     // switch from SYNCED -> PLAIN
                                     const content = (lrcP && typeof lrcP === 'string' && lrcP.trim()) ? lrcP.trim() : (lrcS ? ttp(lrcS) : "");
@@ -745,7 +713,7 @@
                                     itemEl.textContent = content;
                                     prevEl.textContent = content.split("\n").slice(0, 3).join("\n");
                                 }
-                                
+
                                 updateUseBtnState();
                             } catch (err) {
                                 // Defensive: don't let a toggle error corrupt the whole menu
@@ -753,10 +721,10 @@
                             }
                         });
                     }
-                    
+
                     list.appendChild(panel);
                 }
-                
+
                 lastCandidates.forEach((c, idx) => {
                     try {
                         if (c.syncedLyrics || c.plainLyrics) {
@@ -768,7 +736,7 @@
                         debug('[ManualMenu candidate error]', idx, err && err.message ? err.message : err);
                     }
                 });
-                
+
                 // Footer with offset input + buttons
                 const footer = document.createElement('div');
                 Object.assign(footer.style,
@@ -780,7 +748,7 @@
                     gap: '8px',
                     flexWrap: 'wrap'
                 });
-                
+
                 // Offset
                 const offLabel = document.createElement('label');
                 offLabel.textContent = 'Offset (ms):';
@@ -802,7 +770,7 @@
                 });
                 footer.appendChild(offLabel);
                 footer.appendChild(offInput);
-                
+
                 // Manual Search button
                 const searchBtn = document.createElement('button');
                 searchBtn.textContent = 'Manual Search';
@@ -837,7 +805,7 @@
                     }
                 };
                 footer.appendChild(searchBtn);
-                
+
                 // Reset Pick button
                 const resetBtn = document.createElement('button');
                 resetBtn.textContent = 'Reset Pick';
@@ -863,11 +831,11 @@
                             JSON.stringify(config));
                         window.debug("[RESET] keys after delete:",
                             Object.keys(config));
-                        
+
                         // Close the manual panel
                         overlay.remove();
                         menu.remove();
-                        
+
                         // Reload lyrics from normal source
                         const [t, a] = trackKey.split('|');
                         loadLyrics(t,
@@ -885,7 +853,7 @@
                     }
                 };
                 footer.appendChild(resetBtn);
-                
+
                 // Use Selected button
                 const useBtn = document.createElement('button');
                 useBtn.textContent = 'Use Selected';
@@ -898,27 +866,27 @@
                     borderRadius: '4px',
                     cursor: 'pointer'
                 });
-                
+
                 useBtn.onclick = () => {
                     const openBodies = Array.from(list.children)
                         .filter(p => p.querySelector('pre:last-of-type').style.display === 'block');
-                    
+
                     if (openBodies.length !== 1) {
                         alert("Please select exactly one candidate to use.");
                         return;
                     }
-                    
+
                     const rawLrc = openBodies[0].querySelector('pre:last-of-type').textContent;
                     const offset = parseInt(offInput.value, 10) || 0;
-                    
+
                     const [t, a] = trackKey.split('|');
-                    
+
                     lyricsConfig[trackKey] = { manualLrc: addTimestamps(rawLrc), offset };
                     localStorage.setItem(CONFIG_KEY, JSON.stringify(lyricsConfig));
-                    
+
                     overlay.remove();
                     menu.remove();
-                    
+
                     // reload. use normal loadLyrics so UI flow remains same
                     loadLyrics(t,
                         a,
@@ -931,13 +899,13 @@
                         });
                 };
                 footer.appendChild(useBtn);
-                
+
                 menu.appendChild(footer);
-                
+
                 function updateUseBtnState() {
                     const openBodies = Array.from(list.children)
                         .filter(p => p.querySelector('pre[id^="item"]:last-of-type').style.display === 'block');
-                    
+
                     if (openBodies.length === 1) {
                         // highlight
                         useBtn.style.borderColor = '#0a84ff';
@@ -948,14 +916,14 @@
                         useBtn.style.color = '#fff';
                     }
                 }
-                
+
                 updateUseBtnState();
-                
+
             } catch (e) {
                 window.debug("[ERROR] showManualLyricsMenu error:", e.message);
             }
         }
-        
+
         // --- Panel creation and drag/resize logic ---
         function createPanel() {
             try {
@@ -1021,17 +989,17 @@
                 title.id = 'tm-header-title';
                 dragLocked ? createCSPSafeElement(title, 'em', {}, 'Lyrics (Locked)')  : createCSPSafeElement(title, 'em', {}, 'Lyrics');
                 */
-                
+
                 const headerTitle = createCSPSafeElement(header, 'span', { id: 'tm-header-title' }, dragLocked ? `<em>Lyrics (Locked)</em>` : `<em>Lyrics</em>`)
-                
+
                 // header.appendChild(title);
-                
+
                 if (headerTitle) {
                     detectLongClick(headerTitle, toggleLogVisibility, null, 1000);
                 } else {
                     debug('warn', 'createPanel warning: headerTitle doesnt exist. Either a failure occured in creation or there is an incorrect variable query.')
                 }
-                
+
                 const controls = document.createElement('div');
                 Object.assign(controls.style, {
                     display: 'flex',
@@ -1062,7 +1030,7 @@
                 refreshBtn.className = 'material-icons-button';
                 refreshBtn.textContent = "refresh";
                 detectLongClick(refreshBtn, () => { startElementPicker(); }, () => { currentTrackId = null; }, 500);
-                
+
                 const ghIcon = document.createElement('div');
                 Object.assign(ghIcon.style, {
                     display: 'flex',
@@ -1071,26 +1039,14 @@
                     fontSize: '14px'
                 });
                 // ghIcon.innerHTML = `<a href="https://github.com/jayxdcode" target="_blank" title="View on GitHub" style="opacity:0.8; color:white"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg></a>`;
-                const GhLink = createCSPSafeElement(ghIcon, 'a', {
+                const ghLink = createCSPSafeElement(ghIcon, 'a', {
                     href: 'https://github.com/jayxdcode',
                     target: '_blank',
                     title: 'View on GitHub',
                     style: 'opacity:0.8; color:white'
-                });
-                
-                const GhSvg = createCSPSafeElement(GhLink, 'svg', {
-                    xmlns: 'http://www.w3.org/2000/svg',
-                    width: '20',
-                    height: '20',
-                    fill: 'currentColor',
-                    viewBox: '0 0 16 16'
-                });
-                
-                createCSPSafeElement(GhSvg, 'path', {
-                    d: 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8'
-                });
+                }, `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></svg>`);
                 // Exp C
-                
+
                 controls.append(refreshBtn, manualBtn, opDown, opUp, ghIcon);
                 header.appendChild(controls);
                 controls.querySelectorAll('button').forEach(btn => Object.assign(btn.style, {
@@ -1103,7 +1059,7 @@
                     cursor: 'pointer',
                     transition: 'opacity 0.2s'
                 }));
-                
+
                 /*
                 const content = document.createElement('div');
                 content.id = 'tm-lyrics-lines';
@@ -1116,7 +1072,7 @@
                 });
                 content.innerText = 'Lyrics will appear here';
                 */
-                
+
                 const resizeHandle = document.createElement('div');
                 resizeHandle.id = 'tm-lyrics-resize';
                 Object.assign(resizeHandle.style, {
@@ -1130,29 +1086,23 @@
                     opacity: 1
                 });
                 panel.appendChild(header);
-                
+
                 // panel.appendChild(content);
                 createCSPSafeElement(panel, 'div',
                     {
-                        style: `
-                    padding: '12px';
-                    overflowY: 'auto';
-                    scrollBehavior: 'smooth';
-                    flex: '1 1 auto';
-                    minHeight: '0';
-                    `,
+                        style: "padding: 12px;  overflow-y: auto; scroll-behavior: smooth; flex: 1 1 auto; min-height: 0;",
                         id: 'tm-lyrics-lines'
-                        
+
                     }, `<em>Lyrics will appear here</em>`
-                    
+
                 )
-                
+
                 panel.appendChild(resizeHandle);
                 overlay.appendChild(panel);
                 document.body.appendChild(overlay);
-                
+
                 applyTheme(panel);
-                
+
                 // Drag logic
                 let dragX = 0,
                     dragY = 0;
@@ -1183,7 +1133,7 @@
                             top: panel.style.top
                         }));
                     });
-                
+
                 // Touch drag
                 header.addEventListener('touchstart',
                     e => {
@@ -1221,7 +1171,7 @@
                             top: panel.style.top
                         }));
                     });
-                
+
                 // Resize logic
                 let startW, startH, startX, startY;
                 resizeHandle.addEventListener('mousedown',
@@ -1290,16 +1240,16 @@
                             height: panel.style.height
                         }));
                     });
-                
+
                 debug('Lyrics panel successfully initialized.');
-                
+
             } catch (e) {
                 window.debug("[ERROR] createPanel error: ",
                     e.message);
             }
         }
-        
-        
+
+
         function applyTheme(panel) {
             const header = panel.querySelector('#tm-lyrics-header');
             if (currentTheme === 'light') {
@@ -1312,7 +1262,7 @@
                 if (header) header.style.background = `rgba(33, 33, 33, ${currentOpacity})`;
             }
         }
-        
+
         // Replaces previous gmFetch
         function gmFetch(url, headers = {}, signal = null) {
             // Helper to create a safe race for fetchViaBackground
@@ -1337,7 +1287,7 @@
                         });
                 });
             }
-            
+
             if (typeof GM_xmlhttpRequest === 'function') {
                 return new Promise((resolve, reject) => {
                     let resolved = false;
@@ -1361,7 +1311,7 @@
                             reject(new Error('Request timed out'));
                         }
                     });
-                    
+
                     // If a signal is provided, abort the GM request when signaled
                     if (signal) {
                         if (signal.aborted) {
@@ -1400,13 +1350,13 @@
                     });
             }
         }
-        
+
         function gmFetchPost(url,
             body = {},
             headers = {},
             signal = null) {
             headers['Content-Type'] = headers['Content-Type'] || 'application/json';
-            
+
             if (typeof GM_xmlhttpRequest === 'function') {
                 return new Promise((resolve, reject) => {
                     let resolved = false;
@@ -1431,7 +1381,7 @@
                             reject(new Error('Request timed out'));
                         }
                     });
-                    
+
                     if (signal) {
                         if (signal.aborted) {
                             try {
@@ -1473,7 +1423,7 @@
                             });
                     });
                 }
-                
+
                 return fetchViaBgPost(url, {
                         method: 'POST',
                         headers,
@@ -1489,17 +1439,17 @@
                     });
             }
         }
-        
-        
+
+
         window.toggleLogVisibility = toggleLogVisibility;
-        
+
         function toggleLogVisibility() {
             const logs = document.getElementById('tm-logs');
             if (!logs) return;
             logVisible = !logVisible;
             logs.style.display = logVisible ? 'block' : 'none';
         };
-        
+
         /**
          * Attaches a long click detection to a DOM element.
          *
@@ -1515,12 +1465,12 @@
             longClickThreshold = 500) {
             let pressTimer;
             let isLongClickTriggered = false; // Flag to prevent short click after long click
-            
+
             if (!element || typeof onLongClick !== 'function') {
                 console.error("detectLongClick: Invalid element or onLongClick callback provided.");
                 return;
             }
-            
+
             const startTimer = () => {
                 isLongClickTriggered = false; // Reset flag for new press
                 pressTimer = setTimeout(() => {
@@ -1528,11 +1478,11 @@
                     onLongClick();
                 }, longClickThreshold);
             };
-            
+
             const clearTimer = () => {
                 clearTimeout(pressTimer);
             };
-            
+
             // --- Mouse Events ---
             element.addEventListener('mousedown', (event) => {
                 // Prevent right-click from triggering long-click for mouse events
@@ -1541,7 +1491,7 @@
                 }
                 startTimer();
             });
-            
+
             element.addEventListener('mouseup',
                 () => {
                     clearTimer();
@@ -1550,7 +1500,7 @@
                         onShortClick();
                     }
                 });
-            
+
             // If mouse leaves the element while pressed (important to clear timer)
             element.addEventListener('mouseleave',
                 () => {
@@ -1558,7 +1508,7 @@
                     // Reset long click flag if mouse leaves, preventing accidental short click if re-entered
                     isLongClickTriggered = false;
                 });
-            
+
             // --- Touch Events ---
             // Using passive: true for better scroll performance. If you need to prevent default
             // browser behavior (like scrolling/zooming on touch), set to false and handle `event.preventDefault()`.
@@ -1570,7 +1520,7 @@
                 {
                     passive: true
                 });
-            
+
             element.addEventListener('touchend',
                 () => {
                     clearTimer();
@@ -1581,7 +1531,7 @@
                 {
                     passive: true
                 });
-            
+
             element.addEventListener('touchcancel',
                 () => {
                     clearTimer();
@@ -1591,7 +1541,7 @@
                     passive: true
                 });
         }
-        
+
         async function fetchTranslations(lrcText, humanTr, title, artist, signal = null) {
             try {
                 const response = await gmFetchPost(BACKEND_URL, {
@@ -1626,7 +1576,7 @@
                 };
             }
         }
-        
+
         function parseLRCToArray(lrc) {
             if (!lrc) return [];
             const lines = [];
@@ -1652,7 +1602,7 @@
             }
             return lines;
         }
-        
+
         function mergeLRC(origArr, romArr, transArr) {
             const romMap = new Map(romArr.map(r => [r.time, r.text]));
             const transMap = new Map(transArr.map(t => [t.time, t.text]));
@@ -1663,47 +1613,47 @@
                 trans: transMap.get(o.time) || ''
             }));
         }
-        
+
         function parseLRC(lrc, romLrc, translLrc) {
             return mergeLRC(parseLRCToArray(lrc), parseLRCToArray(romLrc), parseLRCToArray(translLrc));
         }
-        
+
         function addTimestamps(lyrics) {
             if (!lyrics || typeof lyrics !== 'string') return "";
-            
+
             try {
                 const timestampRegex = /^\[\d{2}:\d{2}\.\d{2,3}\]/m;
-                
+
                 // 1. Check for existing timestamps
                 if (timestampRegex.test(lyrics)) return lyrics;
-                
+
                 // debug("info", "No timestamps detected. Proceeding with addTimestamps()...")
                 // Your log here will fire correctly.
-                
+
                 // Split the input lyrics into lines
                 let lines = lyrics.split('\n');
-                
+
                 // Define the header lines
                 const header = ["PLAIN LRC MODE", ""];
-                
+
                 // 2. Create the complete list of lines using spread syntax
                 // This is a clean, immutable way to combine the header and original lines.
                 const linesWithHeader = [...header, ...lines];
-                
+
                 const startMs = 100;
-                
+
                 // 3. Map over the new array to add sequential timestamps
                 const result = linesWithHeader.map((line, index) => {
                     const ms = startMs + index;
                     // Pad the millisecond number to exactly 3 digits
                     const timestamp = `[00:00.${String(ms).padStart(3, '0')}]`;
-                    
+
                     return `${timestamp} ${line}`;
                 });
-                
+
                 debug('info', 'Timestamps added. here\'s the result:\n\n', result.join('\n').trim());
                 // This log will now execute successfully, showing the final output.
-                
+
                 return result.join('\n').trim();
             } catch (e) {
                 debug('error', "An error occured while adding timestamps:", e.message, e);
@@ -1711,15 +1661,15 @@
                 // as its internal behavior is crucial for your logging verification.
             }
         }
-        
-        
+
+
         async function loadLyrics(title, artist, album, duration, onTransReady, manual = {
             flag: false,
             query: ""
         }, signal = null) {
             if (!manual.flag) {
                 window.debug('Searching for lyrics:', title, artist, album, duration);
-                
+
                 onTransReady([{
                     time: 0,
                     text: 'Searching for lyrics...',
@@ -1728,7 +1678,7 @@
                 }]);
             } else {
                 window.debug(`Manually searching lyrics: using user prompt "${manual.query}"...`);
-                
+
                 onTransReady([{
                     time: 0,
                     text: `Manually searching lyrics...`,
@@ -1736,10 +1686,10 @@
                     trans: `query: "${manual.query}"`
                 }]);
             }
-            
+
             const trackKey = `${title}|${artist}`;
             let geniusLyrics = null;
-            
+
             try {
                 if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
                 // --- 0) Attempt to get human-translated lyrics first ---
@@ -1749,14 +1699,14 @@
           if (geniusLyrics) { debug("Found translations. Proceeding with merging via the backend...") };
       }
       */
-                
+
                 // --- 1) Manual override check ---
                 if (lyricsConfig[trackKey]?.manualLrc && !manual.flag) {
                     const {
                         manualLrc,
                         offset = 0
                     } = lyricsConfig[trackKey];
-                    
+
                     onTransReady(parseLRC(addTimestamps(manualLrc), '', '').map(l => ({
                         ...l,
                         time: l.time + offset
@@ -1776,25 +1726,25 @@
                         const aIsUnsynced = !a.syncedLyrics;
                         // Check if 'syncedLyrics' is missing or null for element 'b'
                         const bIsUnsynced = !b.syncedLyrics;
-                        
+
                         // Case 1: 'a' has lyrics, and 'b' does not. 'a' should come first.
                         if (!aIsUnsynced && bIsUnsynced) {
                             return -1;
                         }
-                        
+
                         // Case 2: 'a' does not have lyrics, and 'b' does. 'b' should come first.
                         if (aIsUnsynced && !bIsUnsynced) {
                             return 1;
                         }
-                        
+
                         // Case 3: Both 'a' and 'b' are in the same group (both synced or both unsynced).
                         // Maintain original relative order by returning 0 (or you can use other properties for secondary sorting).
                         return 0;
                     });
-                    
+
                     return;
                 }
-                
+
                 // --- 2) Fetch from lrclib (with fallback) ---
                 const primaryMetadata = manual.flag ? manual.query : [title,
                     artist,
@@ -1803,18 +1753,18 @@
                 let searchRes = await gmFetch(`https://lrclib.net/api/search?q=${encodeURIComponent(primaryMetadata)}`, LRCLIB_HEADERS, signal);
                 if (!(searchRes.status === 200 || searchRes.ok)) throw new Error('lrclib search failed');
                 let searchData = JSON.parse(searchRes.responseText);
-                
+
                 if (!Array.isArray(searchData) || !searchData.some(c => c.syncedLyrics)) {
                     if (!manual.flag) {
                         window.debug('Retrying lrclib search without album.');
-                        
+
                         onTransReady([{
                             time: 0,
                             text: 'Searching for lyrics...',
                             roman: `Attempt 2 out of 2 (retrying search without album)`,
                             trans: `${title}   ${artist}   ${album}\n` + `${(duration/60000|0)}`.padStart(2, '0') + ':' + `${(duration/1000)%60}`.padStart(2, '0') + ` (${duration}s)`
                         }]);
-                        
+
                         const fallbackRes = await gmFetch(`https://lrclib.net/api/search?q=${encodeURIComponent([title, artist].join(' '))}`, LRCLIB_HEADERS, signal);
                         if (fallbackRes.status === 200 || fallbackRes.ok) searchData = JSON.parse(fallbackRes.responseText);
                     }
@@ -1825,22 +1775,22 @@
                     const aIsUnsynced = !a.syncedLyrics;
                     // Check if 'syncedLyrics' is missing or null for element 'b'
                     const bIsUnsynced = !b.syncedLyrics;
-                    
+
                     // Case 1: 'a' has lyrics, and 'b' does not. 'a' should come first.
                     if (!aIsUnsynced && bIsUnsynced) {
                         return -1;
                     }
-                    
+
                     // Case 2: 'a' does not have lyrics, and 'b' does. 'b' should come first.
                     if (aIsUnsynced && !bIsUnsynced) {
                         return 1;
                     }
-                    
+
                     // Case 3: Both 'a' and 'b' are in the same group (both synced or both unsynced).
                     // Maintain original relative order by returning 0 (or you can use other properties for secondary sorting).
                     return 0;
                 });
-                
+
                 // --- 3) Pick best candidate ---
                 let candidate = null,
                     minDelta = Infinity;
@@ -1852,8 +1802,8 @@
                     }
                 });
                 if (!candidate && lastCandidates.length > 0) candidate = lastCandidates[0];
-                
-                
+
+
                 if (!candidate || (!candidate.syncedLyrics && !candidate.plainLyrics)) {
                     onTransReady([{
                         time: 0,
@@ -1861,21 +1811,21 @@
                         roman: '(not caused by a script error btw)',
                         trans: 'Maybe this is a new song or perhaps instrumental?'
                     }]);
-                    
+
                     return;
                 }
-                
-                
+
+
                 // --- 4) Process candidate and get translations ---
                 const rawLrc = candidate.syncedLyrics || addTimestamps(candidate.plainLyrics);
                 onTransReady(parseLRC(rawLrc, '', '')); // Render original lyrics immediately
-                
+
                 const {
                     rom,
                     transl
                 } = await fetchTranslations(rawLrc, geniusLyrics, title, artist, signal);
                 onTransReady(parseLRC(rawLrc, rom, transl));
-                
+
             } catch (e) {
                 // alert(`Error while displaying lrc: ${e} \n\n\n Please report this to \n\nhttps://github.com/jayxdcode/src-backend/issues\n\nalongside with a screenshot of this alert.`);
                 window.debug('[❗ERROR] [Lyrics] loadLyrics error:', `${e}`);
@@ -1886,7 +1836,7 @@
                         roman: '',
                         trans: ''
                     }]);
-                    
+
                 } else {
                     onTransReady([{
                         time: 0,
@@ -1894,36 +1844,36 @@
                         roman: '',
                         trans: ''
                     }]);
-                    
+
                 }
             }
         }
-        
+
         function parseTimeString(str) {
             if (!str) return 0;
             const parts = str.split(':').map(Number);
             return parts.length === 2 ? (parts[0] * 60 + parts[1]) * 1000 : (parts.length === 3 ? (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000 : 0);
         }
-        
+
         function timeJump(ms) {
             try {
                 // Sanitize timestamp
                 ms = Number(ms);
                 if (isNaN(ms)) return false;
-                
+
                 const vid = document.querySelector('video');
                 if (vid) {
                     vid.currentTime = ms / 1000;
                     return;
                 }
-                
+
                 debug('warn', '[Lyrics Panel] Could not seek - video not found');
                 return true;
             } catch (e) {
                 debug('[ERROR] timeJump attempt failed: ', e.message);
             }
         }
-        
+
         function addTimeJumpListener() {
             try {
                 const lyricLines = document.querySelectorAll('.handler');
@@ -1944,9 +1894,9 @@
                 debug("[Lyrics Panel error] addTimeJumpListener failed:", e.message);
             }
         }
-        
+
         // i want it to wait for a video tag inside the html to load its metadata before continuing. if it reaches the timeout, skip with a warning
-        
+
         async function getTrackInfo() {
             const vid = document.querySelector('video');
             if (!vid) return null;
@@ -1959,7 +1909,7 @@
             const album = (albumEl && /^\d+(\.\d+)?[MKBT]?\sviews$/i.test(albumEl.textContent.trim())) ? (albumEl.textContent.trim() || '') : '';
             const YTMPROG = queryFirst(SELECTORS.YTMPROG);
             let duration = vid?.duration * 1000 || Number(YTMPROG.getAttribute('aria-valuemax')) * 1000 || null;
-            
+
             return {
                 id: title + '|' + artist,
                 title,
@@ -1978,15 +1928,15 @@
                 }
             };
         }
-        
+
         GM_addStyle('.tm-lrc { min-height:1.6em; } .tm-lyric-line { opacity:.7; } .tm-lyric-line:not(.empty) { white-space: pre-wrap; color: #fff; margin: 20px 0; display: block; } .tm-lrc.plain, .tm-lyric-current { font-weight:bold; font-size:1.25em } .tm-lrc > div { font-size:.75em; color:#ccc; margin-top:2px; } .tm-lrc > div.romanization { font-style:italic !important }')
-        
+
         function renderLyrics(currentIdx) {
             try {
-                
+
                 const YTMPROG = queryFirst(SELECTORS.YTMPROG);
                 let t = Number(YTMPROG.getAttribute('aria-valuenow')) * 1000;
-                
+
                 //debug("[renderLyrics] Called with currentIdx:", currentIdx)
                 const isPlain = lyricsData[0].text.includes('PLAIN');
                 const linesDiv = document.getElementById('tm-lyrics-lines');
@@ -1994,12 +1944,12 @@
                     //debug("[renderLyrics] #tm-lyrics-lines not found, aborting.");
                     return;
                 }
-                
+
                 if (!lyricsData || !Array.isArray(lyricsData)) {
                     //debug("[renderLyrics] lyricsData is invalid or not loaded:", lyricsData);
                     return;
                 }
-                
+
                 if (prevLyricsData !== lyricsData && linesDiv.children) {
                     /*
                     prevLyricsData = lyricsData;
@@ -2036,59 +1986,55 @@
 
                     linesDiv.innerHTML = html;
                     */
-                    
+
                     prevLyricsData = lyricsData;
-                    
+
                     // === CSP-SAFE CONTAINER CLEARING ===
                     // Replaces linesDiv.innerHTML = '';
                     linesDiv.replaceChildren();
                     // ===================================
-                    
+
                     const start = Math.max(0, currentIdx - 70);
                     const end = Math.min(lyricsData.length - 1, currentIdx + 70);
-                    
+
                     for (let i = start; i <= end; i++) {
                         const ln = lyricsData[i];
-                        
+
                         // Check for empty line
                         if (!ln.text && !ln.roman && !ln.trans) {
                             // Use GM_addElement to create the empty line div
                             createCSPSafeElement(linesDiv, 'div', {
-                                className: `tm-lrc tm-lrc-${i} tm-lyric-line empty`
+                                class: `tm-lrc tm-lrc-${i} tm-lyric-line empty`
                             });
                             continue;
                         }
-                        
+
                         const isCurrent = i === currentIdx;
                         const lineClass = isPlain ?
                             `tm-lrc plain tm-lrc-${i}` :
                             `tm-lrc tm-lrc-${i} tm-lyric-${isCurrent ? 'current': 'line'}`;
-                        
+
                         // 1. Create and append the main handler div using GM_addElement
                         const handlerDiv = createCSPSafeElement(linesDiv, 'div', {
-                            className: `handler ${lineClass}`,
-                            'data-timestamp': ln.time,
-                            // textContent is safe as it escapes all characters and avoids HTML parsing
-                            textContent: ln.text || ' '
-                        });
-                        
+                                class: `handler ${lineClass}`,
+                                'data-timestamp': ln.time
+                            },
+                            ln.text || ' '
+                        );
+
                         // 2. Add romanization if present and different
                         if (ln.roman && ln.text.trim() !== ln.roman.trim()) {
                             createCSPSafeElement(handlerDiv, 'div', {
-                                className: 'romanization',
-                                textContent: ln.roman
-                            });
+                                class: 'romanization'
+                            }, ln.roman);
                         }
-                        
+
                         // 3. Add translation if present and different
                         if (ln.trans && ln.text.trim() !== ln.trans.trim()) {
-                            createCSPSafeElement(handlerDiv, 'div', {
-                                className: 'translation',
-                                textContent: ln.trans
-                            });
+                            createCSPSafeElement(handlerDiv, 'div', { class: 'translation' }, ln.trans);
                         }
                     }
-                    
+
                     // Exp C
                     //debug("[renderLyrics] Updated linesDiv.innerHTML");
                 } else {
@@ -2103,7 +2049,7 @@
                         newEl.classList.add('tm-lyric-current');
                     }
                 }
-                
+
                 const currElem = linesDiv.querySelector('.tm-lyric-current');
                 if (currElem && !isPlain) {
                     /* linesDiv.scrollTop =
@@ -2115,26 +2061,26 @@
                 } else {
                     //debug("[renderLyrics] .tm-lyric-current not found for index:", currentIdx);
                 }
-                
+
                 addTimeJumpListener();
                 //debug("[renderLyrics] addTimeJumpListener called");
-                
-                
+
+
             } catch (error) {
                 debug("[renderLyrics] ERROR:", error.message, error);
             }
         }
-        
+
         function syncLyrics(bar, durationMs, progVal = null) {
             try {
                 //debug("[syncLyrics] Called with bar:", bar, "durationMs:", durationMs);
-                
+
                 // quick guards
                 if (!lyricsData || lyricsData.length === 0) {
                     //debug("[syncLyrics] Aborting: missing lyricsData or empty.");
                     return;
                 }
-                
+
                 // if only one lyric line, always render index 0 once
                 if (lyricsData.length === 1) {
                     //debug("[syncLyrics] Only one lyric line.");
@@ -2145,7 +2091,7 @@
                     }
                     return;
                 }
-                
+
                 // Get current time/progress only once, prefer progVal or provided bar
                 let t;
                 if (progVal != null) {
@@ -2156,14 +2102,14 @@
                     const YTMPROG = queryFirst(SELECTORS.YTMPROG);
                     t = Number(YTMPROG.getAttribute('aria-valuenow')) * 1000;
                 }
-                
+
                 if (!Number.isFinite(t)) {
                     //debug("[syncLyrics] Invalid time value:", t);
                     return;
                 }
-                
+
                 playbackPos = t;
-                
+
                 // Cache numeric times on the array to avoid remapping every call.
                 // Attaching _times to the array is cheap and prevents repeated work.
                 if (!lyricsData._times || lyricsData._times.length !== lyricsData.length) {
@@ -2171,12 +2117,12 @@
                     //debug("[syncLyrics] Built times cache:", lyricsData._times);
                 }
                 const times = lyricsData._times;
-                
+
                 // Binary search to find index i such that times[i] <= t < times[i+1]
                 let idx = 0;
                 let lo = 0;
                 let hi = times.length - 1;
-                
+
                 if (t >= times[hi]) {
                     idx = hi;
                 } else if (t <= times[0]) {
@@ -2186,12 +2132,12 @@
                         const mid = (lo + hi) >> 1; // faster floor((lo+hi)/2)
                         const midT = times[mid];
                         const nextT = times[mid + 1];
-                        
+
                         if (midT <= t && t < nextT) {
                             idx = mid;
                             break;
                         }
-                        
+
                         if (t < midT) {
                             hi = mid - 1;
                         } else {
@@ -2199,24 +2145,24 @@
                         }
                     }
                 }
-                
+
                 const isPlain = lyricsData[0].text.includes('PLAIN');
-                
+
                 // Only render when index changes
                 //debug("[syncLyrics] Calculated lyric index:", idx, "lastRenderedIdx:", lastRenderedIdx);
                 if (idx !== lastRenderedIdx) {
                     //debug("[syncLyrics] New lyric index detected:", idx, "Rendering...");
                     renderLyrics(idx);
                     lastRenderedIdx = idx;
-                    
-                    
+
+
                     (async function() {
                         if (prefs.devOps) {
                             if (!got) {
                                 debug(lyricsData);
                                 got = true;
                             }
-                            
+
                             let content = document.querySelector(`.tm-lrc-${idx}`).outerHTML + "\n" + document.querySelector(`.tm-lrc-${idx+1}`).outerHTML + "\n" + document.querySelector(`.tm-lrc-${idx+2}`).outerHTML;
                             await fetch('http://localhost:1821/send', {
                                     method: 'POST',
@@ -2240,24 +2186,24 @@
                                 .catch((error) => {
                                     debug('error', 'Error:', error);
                                 });
-                            
+
                         }
                     })();
-                    
-                    
+
+
                     if (!isPlain && prefs.activeBeta.lrcNotif == true) {
                         function containsRussian(text) {
                             return /[\u0401\u0451\u0410-\u042F\u0430-\u044F]/.test(text);
                         }
-                        
+
                         let c = lyricsData[idx];
                         let curr = {
                             ti: (c.roman && c.text.trim() !== c.roman.trim() && !(containsRussian(c.text))) ? c.roman : c.text,
                             tx: (c.trans && c.text.trim() !== c.trans.trim()) ? c.trans : "---"
                         };
-                        
+
                         let sTag = prefs.lrcNotif.fallback ? "tm-lrcNtf_A" : "tm-lrcNtf_B";
-                        
+
                         if (c.text.trim() != '') {
                             GM_notification({
                                 text: curr.tx,
@@ -2275,7 +2221,7 @@
                                     event.preventDefault();
                                 },
                             });
-                            
+
                             notifIdx = (notifIdx + 1) % prefs.lrcNotif.maxNotifs;
                         }
                     }
@@ -2286,7 +2232,7 @@
                 debug("[syncLyrics] ERROR:", error.message, error);
             }
         }
-        
+
         function setupProgressSync(bar, durationMs) {
             if (!bar) return;
             if (observer) observer.disconnect();
@@ -2296,7 +2242,7 @@
             vid?.removeEventListener('timeupdate', () => {
                 syncLyrics(bar, durationMs, vid.currentTime * 1000);
             })
-            
+
             if (vid && vid.currentTime) {
                 vid.addEventListener('timeupdate', () => {
                     syncLyrics(bar, durationMs, vid.currentTime * 1000);
@@ -2310,7 +2256,7 @@
             }
             syncIntervalId = setInterval(() => syncLyrics(bar, durationMs, vid.currentTime * 1000), 100);
         }
-        
+
         async function poller() {
             try {
                 const info = await getTrackInfo();
@@ -2323,10 +2269,10 @@
                 if (info.id !== currentTrackId) {
                     // cancel any inflight loads for previous track key(s)
                     abortFetch(currentTrackId);
-                    
+
                     currentTrackId = info.id;
                     // debug("info", "currentTrackId:", info.id);
-                    
+
                     currInf = info;
                     currentTrackDur = info.duration;
                     lyricsData = null;
@@ -2337,14 +2283,13 @@
                         lines.replaceChildren();
                         createCSPSafeElement(lines, 'em', {}, 'Loading lyrics...');
                     }
-                    
+
                     // create controller for this load (group under track id)
                     const controller = new AbortController();
                     addController(currentTrackId, controller);
-                    
+
                     try {
-                        if (prefs.devOps) startLyricsObserver();
-                        
+
                         await loadLyrics(info.title, info.artist, info.album, info.duration, (parsed) => {
                             lyricsData = parsed;
                             renderLyrics(0);
@@ -2369,7 +2314,7 @@
                 window.debug('[❗ERROR] [Poller Error]', e.message);
             }
         }
-        
+
         /**
          * Creates and appends a hidden <div> to the page to serve as a log container.
          * This is called once during the script's initialization.
@@ -2378,7 +2323,7 @@
             // Create the main container for logs
             const logs = document.createElement('div');
             logs.id = 'tm-logs';
-            
+
             // Style it to be hidden by default but available for inspection
             Object.assign(logs.style, {
                 position: 'fixed',
@@ -2397,17 +2342,17 @@
                 borderRadius: '5px',
                 display: 'none' // Hidden by default
             });
-            
+
             // Add it to the page
             document.body.appendChild(logs);
-            
+
             console.log('[Lyrics] Log element created. To view it, run this in the console:');
             console.log("document.getElementById('tm-logs').style.display = 'block';");
         }
-        
+
         // Example of how to call it when your script starts:
         // setupLogElement();
-        
+
         /**
          * Logs messages to the console and a dedicated <div> for on-page debugging.
          * @param {...any} args - The values to log.
@@ -2421,7 +2366,7 @@
                 info: 'info'
             };
             const modesArr = ['error', 'warn', 'info'];
-            
+
             // Check if any arg is a string and matches one of the modes
             for (const arg of args) {
                 if (typeof arg === 'string') {
@@ -2432,14 +2377,14 @@
                     }
                 }
             }
-            
+
             // Also log to the standard developer console (or Eruda)
             if (compWindow.eruda) {
                 compWindow.eruda.get('console')[mode]('[Lyrics]', ...args);
             } else {
                 console[mode]('[Lyrics]', ...args);
             }
-            
+
             // Find the log container element on the page
             const logs = document.body.querySelector('#tm-logs');
             if (logs) {
@@ -2460,7 +2405,7 @@
                         return String(arg);
                     })
                     .join(' ')
-                
+
                 // Add class/color styling for mode
                 const colorMap = {
                     error: 'red',
@@ -2479,10 +2424,10 @@
             }
         }
         window.debug = debug;
-        
+
         function init() {
             setupLogElement();
-            
+
             debug(`Welcome! This is YouTube Music Floating Lyrics (YTMFL) version ${YTML_VERSION}. Debug logs active!`);
             debug('Initializing Lyrics Panel');
             createPanel();
@@ -2491,7 +2436,7 @@
             setInterval(poller, POLL_INTERVAL);
             //debug(SELECTORS);
         }
-        
+
         // Global state variables for the observer
         let statObserver = null;
         let targetNode = null;
@@ -2499,9 +2444,9 @@
             childList: true,
             subtree: false,
         };
-        
-        
-        
+
+
+
         // Wait for the main UI to be available before initializing
         /*
         const readyObserver = new MutationObserver((mutations, obs) => {
@@ -2524,14 +2469,14 @@
             window.hasInitializedYTML = true;
             init();
         }
-        
+
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
             safeInit();
         } else {
             window.addEventListener('load', safeInit);
         }
         // ---------------------------
-        
+
     } catch (e) {
         GM_notification({ text: `${e.message}: \n ${e}`, title: 'Fatal Userscript Error', timeout: 30000, onclick: () => { console.log('Notification clicked!'); }, ondone: (wasClicked) => { console.log(`Notification closed. Clicked: ${wasClicked}`); } });
     }
