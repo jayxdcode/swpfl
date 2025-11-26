@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Music Floating Lyrics
 // @namespace    http://tampermonkey.net/
-// @version      2.1.0-CSP
+// @version      2.1.1-CSP
 // @description  YT Music version of SWPFL. Synced lyrics with translation/romanization resizable/draggable panel, themed, opacity control. Translations are provided by Gemini 2.0 Flash and 1.5 Flash via the Google AI Studio API (Accessed via a remote server).
 // @author       jayxdcode
 // @match        https://music.youtube.com/*
@@ -29,7 +29,7 @@
 
     // -- begin --
     try {
-        const YTML_VERSION = '2.1.0-CSP';
+        const YTML_VERSION = '2.1.1-CSP';
         const YTML_USER_AGENT = `YTML (user.js release) v${YTML_VERSION} (https://github.com/jayxdcode/swpfl)`;
 
         const LRCLIB_HEADERS = {
@@ -88,9 +88,10 @@
             "album": [
                 "div.middle-controls > div.content-info-wrapper > span.byline-wrapper > span.subtitle > yt-formatted-string.byline > a.yt-simple-endpoint:nth-of-type(2)",
                 "ytmusic-app > #layout > ytmusic-player-bar.style-scope.ytmusic-app > div.middle-controls.style-scope.ytmusic-player-bar:nth-of-type(2) > div.content-info-wrapper.style-scope.ytmusic-player-bar:nth-of-type(2) > span.byline-wrapper.style-scope.ytmusic-player-bar > span.subtitle.style-scope.ytmusic-player-bar:nth-of-type(2) > yt-formatted-string.byline.style-scope.ytmusic-player-bar.complex-string > a.yt-simple-endpoint.style-scope.yt-formatted-string:nth-of-type(2)"
-            ]
+            ],
+            "vidLink": "yt-music-player-queue-item:not([play-button-state='default']) a"
         }
-
+        
         // Replace the broken cfgUtil with this:
         const cfgUtil = (mvar) => Array.isArray(mvar) ? mvar : (mvar ? [mvar] : []);
 
@@ -990,7 +991,7 @@
                 dragLocked ? createCSPSafeElement(title, 'em', {}, 'Lyrics (Locked)')  : createCSPSafeElement(title, 'em', {}, 'Lyrics');
                 */
 
-                const headerTitle = createCSPSafeElement(header, 'span', { id: 'tm-header-title' }, dragLocked ? `<em>Lyrics (Locked)</em>` : `<em>Lyrics</em>`)
+                const headerTitle = createCSPSafeElement(header, 'span', { id: 'tm-header-title' }, dragLocked ? `<b>Lyrics (Locked)</b>` : `<b>Lyrics</b>`)
 
                 // header.appendChild(title);
 
@@ -1832,7 +1833,7 @@
                 if (e.name === 'AbortError') {
                     onTransReady([{
                         time: 0,
-                        text: 'Aborted due to changing of tracks while data is being fetched)',
+                        text: 'Aborted due to changing of tracks while data is being fetched',
                         roman: '',
                         trans: ''
                     }]);
@@ -1910,8 +1911,15 @@
             const YTMPROG = queryFirst(SELECTORS.YTMPROG);
             let duration = vid?.duration * 1000 || Number(YTMPROG.getAttribute('aria-valuemax')) * 1000 || null;
 
+            const vidLink = queryFirst(SELECTORS.vidLink);
+            const url = vidLink.href;
+
+            const regex = /v=([A-Za-z0-9_-]+)/;
+            const match = url.match(regex);
+            const videoId = match ? match[1] : null;
+
             return {
-                id: title + '|' + artist,
+                id: videoId ?? title + '|' + artist,
                 title,
                 artist,
                 album,
@@ -1924,7 +1932,8 @@
                     artistEl: !!artistEl,
                     albumEl: !!albumEl,
                     vid: !!vid,
-                    YTMPROG: !!YTMPROG
+                    YTMPROG: !!YTMPROG,
+                    videoId
                 }
             };
         }
@@ -2274,6 +2283,7 @@
                     // debug("info", "currentTrackId:", info.id);
 
                     currInf = info;
+                    compWindow.trackInfo = info;
                     currentTrackDur = info.duration;
                     lyricsData = null;
                     lastRenderedIdx = -1;
