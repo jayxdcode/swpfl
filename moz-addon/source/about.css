@@ -1,0 +1,68 @@
+.abt-block {
+  background: rgba(30,30,47,1);
+  color: #fff;
+  padding: 1.25rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.logo-block {
+  text-align: center;
+}
+
+.abt-logo {
+  margin-bottom: 0.5rem;
+}
+
+.abt-title {
+  margin: 0;
+  font-size: 1.75rem;
+}
+
+.abt-tagline {
+  font-style: italic;
+  color: #9ca3af;
+}
+
+.abt-block h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.25rem;
+}
+
+.abt-block ul {
+  padding-left: 1rem;
+}
+
+.abt-block ul li {
+  margin: 0.25rem 0;
+}
+
+.abt-screenshots {
+  display: flex;
+  overflow-x: auto;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.abt-screenshots img {
+  width: 95%;
+  border-radius: 0.25rem;
+}
+
+.split-block {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.split {
+  flex: 1 1 200px;
+  background: #111827;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.abt-block a {
+  color: #3699ff;
+}

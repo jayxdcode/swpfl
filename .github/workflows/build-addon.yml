@@ -1,0 +1,62 @@
+name: "Update Firefox Extension and User Script Releases"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Read current version
+        id: get_version
+        run: |
+          VERSION=$(jq -r .current version.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install web-ext
+        run: npm install --global web-ext
+
+      - name: Sign & upload Firefox Addon
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          SRC_DIR="moz-addon/source"
+          PKG_DIR="moz-addon/packages"
+          VERSION="${{ steps.get_version.outputs.version }}"
+          OUT_FILE="$PKG_DIR/v${VERSION}-swpfl.xpi"
+
+          mkdir -p "$PKG_DIR"
+          echo "Uploading $SRC_DIR to AMO via web-ext"
+          web-ext sign \
+            --api-key "$WEB_EXT_API_KEY" \
+            --api-secret "$WEB_EXT_API_SECRET" \
+            --source-dir "$SRC_DIR" \
+            --artifacts-dir "$PKG_DIR" \
+            --channel listed
+
+          # Rename the signed XPI to desired format
+          SIGNED_XPI=$(ls "$PKG_DIR"/*.xpi | head -n 1)
+          mv "$SIGNED_XPI" "$OUT_FILE"
+
+      - name: Output result
+        run: |
+          echo "Signed artifacts are in moz-addon/packages/"
+          ls -lh moz-addon/packages/
+
+      # --- Release creation ---
+      - name: Create User Script Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: "SWPFL v${{ steps.get_version.outputs.version }}"
+          files: |
+            monkey/swpfl.user.js
+            moz-addon/packages/v${{ steps.get_version.outputs.version }}-swpfl.xpi
+          
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

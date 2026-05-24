@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>swpfl</title>
+  <style type="text/css" media="all">
+    body {
+      visibility: hidden
+    }
+  </style>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.css" rel="stylesheet" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="popup.css" type="text/css" media="all" />
+  <link rel="stylesheet" href="dashboard.css" type="text/css" media="all" />
+  <link rel="stylesheet" href="about.css" type="text/css" media="all" />
+</head>
+
+<body data-theme="dark">
+  <div class="sidebar">
+    <div class="logo-details">
+      <i class='bx bx-menu' id="btn"></i>
+      <i class='icon'>
+        <svg width="30px" height="30px" viewBox="0 0 32 32" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:serif="http://www.serif.com/" xmlns:xlink="http://www.w3.org/1999/xlink">
+          <g id="Icon" fill="white" style="stroke-width:0.5px">
+            
+            <path d="M18.003,23.922l-0.001,0c-1.105,0 -2.002,0.897 -2.002,2.002c-0,1.105 0.897,2.002 2.002,2.002c1.104,-0 2.001,-0.897 2.001,-2.002l0,-7.122c0,-0 6.001,-0.75 6.001,-0.75l0.003,3.867c-1.105,-0 -2.002,0.897 -2.002,2.002c0,1.104 0.897,2.001 2.002,2.001c1.105,0 2.002,-0.897 2.002,-2.001l-0.006,-7.003c0,-0.286 -0.123,-0.559 -0.338,-0.749c-0.215,-0.19 -0.501,-0.278 -0.786,-0.242l-8,1c-0.5,0.062 -0.876,0.488 -0.876,0.992l0,6.003Z" />
+            
+            <path d="M18.003,23.922l-0.001,0c-1.105,0 -2.002,0.897 -2.002,2.002c-0,1.105 0.897,2.002 2.002,2.002c1.104,-0 2.001,-0.897 2.001,-2.002l0,-7.122c0,-0 6.001,-0.75 6.001,-0.75l0.003,3.867c-1.105,-0 -2.002,0.897 -2.002,2.002c0,1.104 0.897,2.001 2.002,2.001c1.105,0 2.002,-0.897 2.002,-2.001l-0.006,-7.003c0,-0.286 -0.123,-0.559 -0.338,-0.749c-0.215,-0.19 -0.501,-0.278 -0.786,-0.242l-8,1c-0.5,0.062 -0.876,0.488 -0.876,0.992l0,6.003Z" />
+            
+            <path d="M27,12.994l0.009,-6.035c-0,-0.53 -0.211,-1.039 -0.586,-1.414c-0.375,-0.375 -0.884,-0.586 -1.414,-0.586c-4.185,0 -13.824,0 -18.009,0c-0.53,0 -1.039,0.211 -1.414,0.586c-0.375,0.375 -0.586,0.884 -0.586,1.414c0,4.184 0,13.817 0,18c-0,0.531 0.211,1.04 0.586,1.415c0.375,0.375 0.884,0.585 1.414,0.585l6,0.039" style="fill:none;stroke:#3699ff;stroke-width:1px;" />
+            
+            <path d="M9.004,10l13.983,0c0.552,0 1,-0.448 1,-1c0,-0.552 -0.448,-1 -1,-1l-13.983,0c-0.552,0 -1,0.448 -1,1c0,0.552 0.448,1 1,1Z" />
+            
+            <path d="M9.004,13.994l13.983,0c0.552,0 1,-0.448 1,-1c0,-0.552 -0.448,-1 -1,-1l-13.983,0c-0.552,0 -1,0.448 -1,1c0,0.552 0.448,1 1,1Z" />
+            
+            <path d="M9.004,18l5.981,0c0.552,-0 1,-0.448 1,-1c-0,-0.552 -0.448,-1 -1,-1l-5.981,0c-0.552,-0 -1,0.448 -1,1c0,0.552 0.448,1 1,1Z" />
+            
+            <path d="M9.004,22.006l5.981,-0c0.552,-0 1,-0.448 1,-1c-0,-0.552 -0.448,-1 -1,-1l-5.981,-0c-0.552,-0 -1,0.448 -1,1c0,0.552 0.448,1 1,1Z" />
+            
+          </g>
+          
+        </svg>
+      </i>
+      <br />
+      <div class="logo_name">swpfl</div>
+    </div>
+    <ul class="nav-list">
+      <li>
+        <a href="#" data-sec=".dash" data-target="true">
+          <i class='bx bx-grid-alt'></i><span class="links_name">Dashboard</span>
+        </a>
+        <span class="tooltip">Dashboard</span>
+      </li>
+      <li>
+        <a href="#" data-sec=".saved">
+          <i class='bx bx-hdd'></i><span class="links_name">Cached Data</span>
+        </a>
+        <span class="tooltip">Cached Data</span>
+      </li>
+      <li>
+        <a href="#" data-sec=".conf">
+          <i class='bx bx-cog'></i><span class="links_name">Configurations</span>
+        </a>
+        <span class="tooltip">Configurations</span>
+      </li>
+      <li>
+        <a href="#" data-sec=".abt">
+          <i class='bx bx-info-circle'></i><span class="links_name">About Addon</span>
+        </a>
+        <span class="tooltip">About Addon</span>
+      </li>
+      <li class="exitC"><i class='bx bx-log-out' id="log_out"></i></li>
+    </ul>
+  </div>
+  
+  <section class="default dash home-section">
+    <div class="text">Dashboard</div>
+    <div class="xbreak"></div>
+    <div class="contents">
+      <div class="dashboard">
+        <br />
+        <section class="category">
+          <h2>Local</h2>
+          <div class="grid">
+            <div class="card wide">
+              <h3>Stored LRC Data</h3>
+              <div class="bar-container">
+                <div class="bar" style="--pct:0%;"></div>
+              </div>
+              <small>Threshold: 80%</small>
+            </div>
+            <div class="card wide">
+              <h3>Songs Processed</h3>
+              <div class="stat unavailable" id="songsProcessed">Unavailable</div>
+            </div>
+            <div class="card wide">
+              <h3>Cached Entries</h3>
+              <div class="stat unavailable" id="cachedEntries">Unavailable</div>
+            </div>
+            <div class="card wide">
+              <h3>Version</h3>
+              <div class="stat"><code class="currVer">-</code></div>
+              <div class="stat small">Latest: <code class="latestVer">-</code></div>
+            </div>
+          </div>
+        </section>
+        <section class="category">
+          <h2>Backend</h2>
+          <div class="card">
+            <h3> &gt; Note</h3><small class="note">Backend-related information refresh every 30 seconds.</small>
+          </div>
+          <br/>
+          <div class="grid">
+            <div class="card">
+              <h3>Status</h3>
+              <div class="stat unavailable backStat">Unavailable<br><small>Last Checked: yyyy-mm-dd hh:mm UTC</small></div>
+            </div>
+            <div class="card">
+              <h3>Latency</h3>
+              <div class="stat unavailable backMs">Unavailable</div>
+            </div>
+            <div class="card">
+              <h3>Uptime</h3>
+              <div class="stat unavailable upt">Unavailable</div>
+            </div>
+            <div class="card">
+              <h3>CPU Load (GHz)</h3>
+              <div class="stat unavailable cpuLoad"><code>Unavailable</code></div>
+            </div>
+            <div class="card">
+              <h3>Free Memory</h3>
+              <div class="stat unavailable freeMem">Unavailable</div>
+            </div>
+          </div>
+        </section>
+        <section class="category">
+          <h2>Database</h2>
+          <div class="grid">
+            <div class="card">
+              <h3>Status</h3>
+              <div class="stat unavailable dbStat">Unavailable</div>
+            </div>
+            <div class="card">
+              <h3>Provider</h3>
+              <div class="stat unavailable dbProv">Unavailable</div>
+            </div>
+            <div class="card">
+              <h3>Latency</h3>
+              <div class="stat unavailable dbMs">Unavailable</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+  
+  <section class="saved home-section">
+    <div class="text">Saved Data</div>
+    <div class="xbreak"></div>
+    <div class="contents">
+      <div class="toolbar">
+        <input id="searchInput" type="search" placeholder="Search title, tag, or text..." />
+        <select id="sortSelect">
+          <option value="new">Newest first</option>
+          <option value="old">Oldest first</option>
+          <option value="title">Title A→Z</option>
+          <option value="pin">Pinned first</option>
+        </select>
+        <button id="exportBtn" class="btn"><i class='bx bx-export'></i> Export</button>
+        <label class="btn file-label">
+          <input id="importFile" type="file" accept="application/json" hidden />
+          <i class='bx bx-import'></i> Import
+          
+        </label>
+        <button id="bulkDeleteBtn" class="btn danger"><i class='bx bx-trash'></i> Delete selected</button>
+      </div>
+      <ul id="savedList" class="saved-list"></ul>
+      <div class="empty-state" id="emptyState">No saved items yet.</div>
+    </div>
+  </section>
+  
+  <section class="conf home-section">
+    <div class="text">Configurations</div>
+    <div class="xbreak"></div>
+    <div class="contents">
+      <div class="card wide">
+        <h3>General</h3>
+        <div class="form-row">
+          <label class="switch">
+            <input type="checkbox" id="enableSync" />
+            <span>Use Firefox Sync storage</span>
+          </label>
+          <small>Local if off. Sync follows your Firefox account.</small>
+        </div>
+        <div class="form-row">
+          <label class="switch">
+            <input type="checkbox" id="enableNotifications" />
+            <span>Notifications</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="switch">
+            <input type="checkbox" id="enableLogging" />
+            <span>Debug logging</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="switch">
+            <input type="checkbox" id="autoSave" />
+            <span>Autosave items</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>Hotkey (toggle lyrics): <input id="hotkey" placeholder="e.g. Alt+L" /></label>
+        </div>
+      </div>
+      
+      <div class="card wide">
+        <h3>Backup</h3>
+        <div class="btn-row">
+          <button id="exportSettingsBtn" class="btn"><i class='bx bx-export'></i> Export settings</button>
+          <label class="btn file-label">
+            <input id="importSettingsFile" type="file" accept="application/json" hidden />
+            <i class='bx bx-import'></i> Import settings
+          </label>
+          <button id="clearAllBtn" class="btn danger"><i class='bx bx-bomb'></i> Clear all data</button>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>Theme</h3>
+        <div class="stat">Dark only (Spotify doesn’t ship light). <small>Body has <code>data-theme="dark"</code>.</small></div>
+      </div>
+    </div>
+  </section>
+  
+  <section class="abt home-section">
+    <div class="text">About swpfl</div>
+    <div class="xbreak"></div>
+    <div class="contents">
+      <!-- Logo + Title -->
+      <div class="abt-block logo-block">
+        <svg width="100" height="100" viewBox="0 0 32 32" class="abt-logo" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:serif="http://www.serif.com/" xmlns:xlink="http://www.w3.org/1999/xlink">
+        
+          <g id="Icon" fill="white" style="stroke-width:0.5px">
+            
+            <path d="M18.003,23.922l-0.001,0c-1.105,0 -2.002,0.897 -2.002,2.002c-0,1.105 0.897,2.002 2.002,2.002c1.104,-0 2.001,-0.897 2.001,-2.002l0,-7.122c0,-0 6.001,-0.75 6.001,-0.75l0.003,3.867c-1.105,-0 -2.002,0.897 -2.002,2.002c0,1.104 0.897,2.001 2.002,2.001c1.105,0 2.002,-0.897 2.002,-2.001l-0.006,-7.003c0,-0.286 -0.123,-0.559 -0.338,-0.749c-0.215,-0.19 -0.501,-0.278 -0.786,-0.242l-8,1c-0.5,0.062 -0.876,0.488 -0.876,0.992l0,6.003Z" />
+            
+            <path d="M18.003,23.922l-0.001,0c-1.105,0 -2.002,0.897 -2.002,2.002c-0,1.105 0.897,2.002 2.002,2.002c1.104,-0 2.001,-0.897 2.001,-2.002l0,-7.122c0,-0 6.001,-0.75 6.001,-0.75l0.003,3.867c-1.105,-0 -2.002,0.897 -2.002,2.002c0,1.104 0.897,2.001 2.002,2.001c1.105,0 2.002,-0.897 2.002,-2.001l-0.006,-7.003c0,-0.286 -0.123,-0.559 -0.338,-0.749c-0.215,-0.19 -0.501,-0.278 -0.786,-0.242l-8,1c-0.5,0.062 -0.876,0.488 -0.876,0.992l0,6.003Z" />
+            
+            <path d="M27,12.994l0.009,-6.035c-0,-0.53 -0.211,-1.039 -0.586,-1.414c-0.375,-0.375 -0.884,-0.586 -1.414,-0.586c-4.185,0 -13.824,0 -18.009,0c-0.53,0 -1.039,0.211 -1.414,0.586c-0.375,0.375 -0.586,0.884 -0.586,1.414c0,4.184 0,13.817 0,18c-0,0.531 0.211,1.04 0.586,1.415c0.375,0.375 0.884,0.585 1.414,0.585l6,0.039" style="fill:none;stroke:#3699ff;stroke-width:1px;" />
+            
+            <path d="M9.004,10l13.983,0c0.552,0 1,-0.448 1,-1c0,-0.552 -0.448,-1 -1,-1l-13.983,0c-0.552,0 -1,0.448 -1,1c0,0.552 0.448,1 1,1Z" />
+            
+            <path d="M9.004,13.994l13.983,0c0.552,0 1,-0.448 1,-1c0,-0.552 -0.448,-1 -1,-1l-13.983,0c-0.552,0 -1,0.448 -1,1c0,0.552 0.448,1 1,1Z" />
+            
+            <path d="M9.004,18l5.981,0c0.552,-0 1,-0.448 1,-1c-0,-0.552 -0.448,-1 -1,-1l-5.981,0c-0.552,-0 -1,0.448 -1,1c0,0.552 0.448,1 1,1Z" />
+            
+            <path d="M9.004,22.006l5.981,-0c0.552,-0 1,-0.448 1,-1c-0,-0.552 -0.448,-1 -1,-1l-5.981,-0c-0.552,-0 -1,0.448 -1,1c0,0.552 0.448,1 1,1Z" />
+            
+          </g>
+          
+        </svg>
+        <h2 class="abt-title">swpfl</h2>
+        <p class="abt-tagline">Spotify Web Player Floating Lyrics</p>
+      </div>
+      
+      <!-- What It Does -->
+      <div class="abt-block">
+        <h3>What It Does</h3>
+        <p>
+          swpfl adds a floating, draggable lyrics panel to Spotify Web Player in Firefox. <br /><br />
+          • Real-time synced lyrics <br />
+          • Resizable & movable interface <br />
+          • Opacity control <br />
+          • Lyrics from LRCLib <br />
+          • Translations & romanization via Google AI
+        </p>
+      </div>
+      
+      <!-- Technical Info -->
+      <div class="abt-block">
+        <h3>Technical Info</h3>
+        <ul>
+          <li><strong>Platform:</strong> Firefox Desktop & Firefox Android</li>
+          <li><strong>Status:</strong> Experimental</li>
+          <li><strong>Category:</strong> Music & Videos</li>
+          <li><strong>UUID:</strong> swpfl@jayxdcode.github.io</li>
+          <li><strong>Free to Use</strong></li>
+        </ul>
+      </div>
+      
+      <!-- Screenshots -->
+      <div class="abt-block">
+        <h3>Screenshots</h3>
+        <div class="abt-screenshots">
+          <img src="https://addons.mozilla.org/user-media/previews/full/325/325881.png?modified=1752131849" alt="Lyrics panel">
+          <img src="https://addons.mozilla.org/user-media/previews/full/325/325882.png?modified=1752131849" alt="Translation view">
+          <img src="https://addons.mozilla.org/user-media/previews/full/325/325883.png?modified=1752131849" alt="Settings menu">
+        </div>
+      </div>
+      
+      <!-- Contact & Support -->
+      <div class="abt-block">
+        <h3>Contact & Support</h3>
+        <p>
+          🐛 <a href="https://github.com/jayxdcode/src-backend/issues" target="_blank">Report issues</a><br>
+          🔧 <a href="https://github.com/jayxdcode/src-backend" target="_blank">GitHub repo</a><br>
+          📧 <a href="mailto:jayxdcode@proton.me">jayxdcode@proton.me</a>
+        </p>
+      </div>
+      
+      <!-- License & Contributing -->
+      <div class="abt-block split-block">
+        <div class="split">
+          <h3>License</h3>
+          <p>This software is licensed under GNU AGPL v3.</p>
+          <br />
+          <span onclick="openLicense()"><u>Click here to view.</u></span>
+        </div>
+        <div class="split">
+          <h3>Contributing</h3>
+          <p>Contributions welcome!<br> Just open a pull request here: <a href="https://github.com/jayxdcode/src-backend/pulls" target="_blank">jayxdcode/src-backend pull requests</a></p>
+        </div>
+      </div>
+  </section>
+  
+  <script>
+    function openLicense() {
+      const style = document.createElement("style");
+      style.textContent = `
+		.license-overlay {
+		  @import url('https://fonts.googleapis.com/css2?family=Noto+Mono&display=swap');
+			position: fixed;
+			inset: 0;
+			z-index: 100;
+			background-color: rgba(0, 0, 0, 0.5);
+			backdrop-filter: blur(8px);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-family: 'Noto Mono', monospace;
+		}
+		.license-box {
+			position: relative;
+			display: block;
+			aspect-ratio: 4 / 6;
+			width: 80vw;
+			max-width: 800px;
+			overflow: auto;
+			background: #1e1e2f;
+			color: white;
+			padding: 1.5em;
+			border-radius: 10px;
+			white-space: pre-wrap;
+			word-break: break-word;
+			box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+			line-height: 1.6;
+			font-size: 0.9rem;
+			-webkit-font-smoothing: antialiased;
+		}
+		.license-close {
+			position: absolute;
+			top: 10px;
+			right: 14px;
+			background: none;
+			border: none;
+			color: white;
+			font-size: 1.5em;
+			cursor: pointer;
+			font-family: sans-serif;
+		}
+	`;
+      document.head.appendChild(style);
+      
+      const overlay = document.createElement("div");
+      overlay.className = "license-overlay";
+      
+      const box = document.createElement("pre");
+      box.className = "license-box";
+      
+      const closeBtn = document.createElement("button");
+      closeBtn.className = "license-close";
+      closeBtn.textContent = "×";
+      closeBtn.addEventListener("click", () => document.body.removeChild(overlay));
+      
+      box.appendChild(closeBtn);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      
+      (async () => {
+        try {
+          const res = await fetch("./LICENSE");
+          box.textContent = res.ok ? await res.text() : "License not available.";
+          box.appendChild(closeBtn);
+        } catch (e) {
+          console.error("License fetch error:", e);
+          box.textContent = "License not available.";
+          box.appendChild(closeBtn);
+        }
+      })();
+    }
+  </script>
+  
+  <script src="storage.js"></script>
+  <script src="popup.js"></script>
+  <script src="dashboard.js"></script>
+  <script src="saved.js"></script>
+  <script src="config.js"></script>
+</body>
+
+</html>

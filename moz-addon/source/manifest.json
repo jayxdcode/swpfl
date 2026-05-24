@@ -1,0 +1,60 @@
+{
+  "manifest_version": 2,
+  "name": "Spotify Web Player Floating Lyrics (swpfl)",
+  "version": "3.0.1",
+  "description": "Firefox extensions release of swpfl (originally a Tampermonkey userscript).\nSynced lyrics with translation/romanization resizable/draggable panel, themed, opacity control. \n\nTranslations are provided by Gemini 2.0 Flash and 1.5 Flash via the Google AI Studio API (Accessed via a remote server).",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "swpfl@jayxdcode.github.io",
+      "strict_min_version": "68.0"
+    },
+    "gecko_android": {
+      "strict_min_version": "120.0"
+    }
+  },
+  "browser_action": {
+    "default_icon": "icons/icon.svg",
+    "default_title": "swpfl",
+    "default_popup": "popup.html",
+    "theme_icons": [{
+      "light": "icons/icon.svg",
+      "dark": "icons/icon-dark.svg",
+      "size": 16
+    }, {
+      "light": "icons/icon.svg",
+      "dark": "icons/icon-dark.svg",
+      "size": 32
+    }]
+  },
+  "permissions": [
+    "https://*.spotify.com/*",
+    "https://genius.com/*",
+    "https://lyrxl.onrender.com/*",
+    "https://lrclib.net/*",
+    "https://raw.githubusercontent.com/*",
+    "storage",
+    "notifications"
+  ],
+  "icons": {
+    "32": "icons/icon.svg",
+    "64": "icons/icon.svg"
+  },
+  "content_scripts": [
+  {
+    "matches": [
+      "https://*.spotify.com/*"
+    ],
+    "js": [
+      "swpfl.js",
+      "storage.js"
+    ],
+    "run-at": "document-idle"
+  }],
+  "background": {
+    "scripts": [
+      "background.js",
+      "storage.js"
+    ],
+    "persistent": false
+  }
+}
